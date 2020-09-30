@@ -39,7 +39,7 @@ TEST(CalendarTest, TradeStartTime) {
           kRegion);
   auto instruments = iridium::instrument_list({kInstrumentName});
   auto freqs = iridium::data::data_freq_list({kFreqD});
-  auto hdf5data = std::make_unique<iridium::data::HDF5Data>(
+  auto hdf5data = std::make_unique<iridium::data::TradeData>(
       kFilePath,
       *instruments,
       *freqs);
@@ -73,7 +73,7 @@ TEST(CalendarTest, Ticks) {
   auto instruments = iridium::instrument_list({kInstrumentName});
   auto freqs = iridium::data::data_freq_list({kFreq4H});
 
-  auto hdf5data = std::make_unique<iridium::data::HDF5Data>(
+  auto hdf5data = std::make_unique<iridium::data::TradeData>(
       kFilePath,
       *instruments,
       *freqs);

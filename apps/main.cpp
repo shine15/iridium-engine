@@ -20,7 +20,7 @@ int main() {
   using iridium::Account;
   using iridium::instrument_list;
   using iridium::data::data_freq_list;
-  using iridium::data::HDF5Data;
+  using iridium::data::TradeData;
   using iridium::data::StringToDataFreq;
 
   // settings
@@ -50,7 +50,7 @@ int main() {
   auto instruments = instrument_list({kInstrument1, kInstrument2, kInstrument3});
 //  auto instruments = instrument_list({kInstrument1});
   auto freqs = data_freq_list({kHistFreq, kTickFreq});
-  auto hdf5data = std::make_unique<HDF5Data>(kFilePath, *instruments, *freqs.get());
+  auto hdf5data = std::make_unique<TradeData>(kFilePath, *instruments, *freqs.get());
 
   // clock
   iridium::calendar::Clock clock(
@@ -67,7 +67,7 @@ int main() {
         *instruments, *it, kHistDataCount, StringToDataFreq(kHistFreq));
     for (int j = 0; j < StringToDataFreq(kHistFreq) / StringToDataFreq(kTickFreq); ++j) {
       auto tick = *it + j * StringToDataFreq(kTickFreq);
-      auto data_map = hdf5data->candlestickData(*instruments, tick, StringToDataFreq(kTickFreq));
+      auto data_map = hdf5data->candlestick_data(*instruments, tick, StringToDataFreq(kTickFreq));
       for (auto const &[name, data] : *data_map) {
         if (data) {
           hist_data_map->at(name)->back() = data.value();

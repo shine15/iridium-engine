@@ -12,197 +12,7 @@ limitations under the License.
 
 #include <iridium/data.hpp>
 
-iridium::data::HDF5Data::HDF5Data(
-    const std::string &file_name,
-    const InstrumentList &instruments,
-    const std::vector<DataFreq> &freqs) :
-    instruments_(std::move(instruments)),
-    freqs_(std::move(freqs)) {
-  using H5::H5File;
-  using H5::CompType;
-  using H5::PredType;
-  using H5::DataSet;
-  using H5::FileIException;
-  using H5::DataSetIException;
-
-  try {
-    file_ = std::make_unique<H5File>(file_name, H5F_ACC_RDONLY);
-    // Dataset & time indices in memory
-    CompType time_index_type(sizeof(int));
-    time_index_type.insertMember("time", 0, PredType::NATIVE_INT);
-    for (auto &instrument : instruments) {
-      for (auto &freq : freqs) {
-        auto name = instrument->name() + "_" + DataFreqToString(freq);
-        auto dataset_name = "/instruments/" + name;
-        auto dataset = std::make_shared<DataSet>(file_->openDataSet(dataset_name));
-        datasets_[name] = dataset;
-        auto size = dataset->getSpace().getSimpleExtentNpoints();
-        auto times = std::make_shared<std::vector<int>>(size);
-        dataset->read(times.get()->data(), time_index_type);
-        time_indices_[name] = times;
-      }
-    }
-    // CompType candlestick history data
-    candlestick_type_ = CompType(sizeof(Candlestick));
-    candlestick_type_.insertMember("time", HOFFSET(Candlestick, time), PredType::NATIVE_INT);
-    candlestick_type_.insertMember("open", HOFFSET(Candlestick, open), PredType::NATIVE_FLOAT);
-    candlestick_type_.insertMember("close", HOFFSET(Candlestick, close), PredType::NATIVE_FLOAT);
-    candlestick_type_.insertMember("high", HOFFSET(Candlestick, high), PredType::NATIVE_FLOAT);
-    candlestick_type_.insertMember("low", HOFFSET(Candlestick, low), PredType::NATIVE_FLOAT);
-    candlestick_type_.insertMember("volume", HOFFSET(Candlestick, volume), PredType::NATIVE_INT);
-  } catch (FileIException const &err) {
-    throw err;
-  } catch (DataSetIException const &err) {
-    throw err;
-  }
-}
-
-std::string
-iridium::data::HDF5Data::dataset_name(
-    const std::string &instrument_name,
-    iridium::data::DataFreq freq) const {
-  return instrument_name + "_" + DataFreqToString(freq);
-}
-
-std::shared_ptr<H5::DataSet>
-iridium::data::HDF5Data::instrument_dataset(
-    const std::string &instrument_name,
-    iridium::data::DataFreq freq) const {
-  return datasets_.at(dataset_name(instrument_name, freq));
-}
-
-std::shared_ptr<std::vector<int>>
-iridium::data::HDF5Data::time_indices(
-    const std::string &instrument_name,
-    iridium::data::DataFreq freq) const {
-  return time_indices_.at(dataset_name(instrument_name, freq));
-}
-
-int iridium::data::HDF5Data::time_index(
-    const std::string &instrument_name,
-    std::time_t time,
-    iridium::data::DataFreq freq) const {
-  using iridium::algorithm::BinarySearch;
-  auto index = BinarySearch(
-      *(time_indices(instrument_name, freq).get()),
-      static_cast<int>(time),
-      true);
-  if (index == -1) {
-    throw std::out_of_range("Candlestick Data Not Found");
-  } else {
-    return index;
-  }
-}
-
-std::shared_ptr<iridium::data::DataList>
-iridium::data::HDF5Data::history_data_(
-    const std::string &instrument_name,
-    std::time_t begin,
-    int count,
-    iridium::data::DataFreq freq,
-    bool reversed = false) const {
-  using H5::DataSpace;
-  auto begin_index = time_index(instrument_name, begin, freq);
-  hsize_t data_start[] =
-      {static_cast<hsize_t>(reversed ? begin_index : begin_index - count + 1)};
-  hsize_t data_count[] = {static_cast<hsize_t>(count)};
-  hsize_t data_stride[] = {1};
-  hsize_t data_block[] = {1};
-  auto dataset = instrument_dataset(instrument_name, freq).get();
-  auto fspace = dataset->getSpace();
-  fspace.selectHyperslab(
-      H5S_SELECT_SET,
-      data_count,
-      data_start,
-      data_stride,
-      data_block);
-  auto candles = std::make_shared<std::vector<data::Candlestick>>(count);
-  hsize_t m_dim[1] = {static_cast<hsize_t>(count)};
-  DataSpace mspace(1, m_dim);
-  dataset->read(
-      candles.get()->data(),
-      candlestick_type_,
-      mspace,
-      fspace);
-  std::sort(std::begin(*candles.get()),
-            std::end(*candles.get()),
-            [](auto c1, auto c2) {
-              return c1.time < c2.time;
-            });
-  return candles;
-}
-
-std::optional<iridium::data::Candlestick>
-iridium::data::HDF5Data::candlestickData(
-    const std::string &instrument_name,
-    std::time_t time,
-    iridium::data::DataFreq freq) const {
-  try {
-    return history_data(instrument_name, time, 1, freq).get()->front();
-  } catch (...) {
-    return std::nullopt;
-  }
-}
-
-std::shared_ptr<iridium::data::TickDataMap>
-iridium::data::HDF5Data::candlestickData(
-    const iridium::InstrumentList &instruments,
-    std::time_t time,
-    iridium::data::DataFreq freq) const {
-  auto data_map =
-      std::make_shared<std::map<std::string, std::optional<iridium::data::Candlestick>>>();
-  for (const auto &instrument : instruments) {
-    data_map->insert(
-        {instrument->name(),
-         candlestickData(instrument->name(), time, freq)});
-  }
-  return data_map;
-}
-
-std::shared_ptr<iridium::data::DataList>
-iridium::data::HDF5Data::history_data_date_range(
-    const std::string &instrument_name,
-    std::time_t begin,
-    std::time_t end,
-    iridium::data::DataFreq freq) const {
-  auto begin_index = time_index(instrument_name, begin, freq);
-  auto end_index = time_index(instrument_name, end, freq);
-  return history_data_(
-      instrument_name,
-      begin,
-      begin_index - end_index + 1,
-      freq);
-}
-
-std::shared_ptr<iridium::data::DataList>
-iridium::data::HDF5Data::history_data(
-    const std::string &instrument_name,
-    std::time_t end,
-    int count,
-    iridium::data::DataFreq freq) const {
-  return history_data_(
-      instrument_name,
-      end,
-      count,
-      freq,
-      true);
-}
-
-std::shared_ptr<iridium::data::DataListMap>
-iridium::data::HDF5Data::history_data(
-    const InstrumentList &instruments,
-    std::time_t end,
-    int count,
-    iridium::data::DataFreq freq) const {
-  auto hist_data_map =
-      std::make_shared<std::map<std::string,
-                                std::shared_ptr<std::vector<iridium::data::Candlestick>>>>();
-  for (const auto &instrument : instruments) {
-    hist_data_map->insert({instrument->name(), history_data(instrument->name(), end, count, freq)});
-  }
-  return hist_data_map;
-}
-
+// utility methods
 std::string
 iridium::data::DataFreqToString(const iridium::data::DataFreq &freq) {
   switch (freq) {
@@ -319,4 +129,252 @@ std::ostream &operator<<(std::ostream &os, const iridium::data::Candlestick &can
      << " low: " << candlestick.low
      << " volume: " << candlestick.volume;
   return os;
+}
+
+// TradeData Pimpl
+class iridium::data::TradeData::DataImpl {
+ public:
+  DataImpl(
+      const std::string &file_name,
+      const InstrumentList &instruments,
+      const std::vector<DataFreq> &freqs);
+
+  [[nodiscard]]
+  int time_index(
+      const std::string &instrument_name,
+      std::time_t time,
+      DataFreq freq) const;
+
+  [[nodiscard]]
+  std::shared_ptr<H5::DataSet>
+  instrument_dataset(const std::string &instrument_name, DataFreq freq) const;
+
+  [[nodiscard]]
+  static std::string
+  dataset_name(const std::string &instrument_name, DataFreq freq);
+
+  [[nodiscard]]
+  std::shared_ptr<std::vector<int>>
+  time_indices(const std::string &instrument_name, DataFreq freq) const;
+
+  [[nodiscard]]
+  std::shared_ptr<DataList> history_data_(
+      const std::string &instrument_name,
+      std::time_t begin,
+      int count,
+      DataFreq freq,
+      bool reversed) const;
+
+ private:
+  std::unique_ptr<H5::H5File> file_;
+
+  std::vector<std::shared_ptr<Instrument>> instruments_;
+
+  std::vector<DataFreq> freqs_;
+
+  std::map<std::string, std::shared_ptr<std::vector<int>>> time_indices_;
+
+  std::map<std::string, std::shared_ptr<H5::DataSet>> datasets_;
+
+  H5::CompType candlestick_type_;
+};
+
+iridium::data::TradeData::DataImpl::DataImpl(
+    const std::string &file_name,
+    const iridium::InstrumentList &instruments,
+    const std::vector<DataFreq> &freqs) :
+    instruments_(instruments),
+    freqs_(freqs) {
+  using H5::H5File;
+  using H5::CompType;
+  using H5::PredType;
+  using H5::DataSet;
+  using H5::FileIException;
+  using H5::DataSetIException;
+
+  try {
+    file_ = std::make_unique<H5File>(file_name, H5F_ACC_RDONLY);
+    // Dataset & time indices in memory
+    CompType time_index_type(sizeof(int));
+    time_index_type.insertMember("time", 0, PredType::NATIVE_INT);
+    for (auto &instrument : instruments) {
+      for (auto &freq : freqs) {
+        auto name = instrument->name() + "_" + DataFreqToString(freq);
+        auto dataset_name = "/instruments/" + name;
+        auto dataset = std::make_shared<DataSet>(file_->openDataSet(dataset_name));
+        datasets_[name] = dataset;
+        auto size = dataset->getSpace().getSimpleExtentNpoints();
+        auto times = std::make_shared<std::vector<int>>(size);
+        dataset->read(times->data(), time_index_type);
+        time_indices_[name] = times;
+      }
+    }
+    // CompType candlestick history data
+    candlestick_type_ = CompType(sizeof(Candlestick));
+    candlestick_type_.insertMember("time", HOFFSET(Candlestick, time), PredType::NATIVE_INT);
+    candlestick_type_.insertMember("open", HOFFSET(Candlestick, open), PredType::NATIVE_FLOAT);
+    candlestick_type_.insertMember("close", HOFFSET(Candlestick, close), PredType::NATIVE_FLOAT);
+    candlestick_type_.insertMember("high", HOFFSET(Candlestick, high), PredType::NATIVE_FLOAT);
+    candlestick_type_.insertMember("low", HOFFSET(Candlestick, low), PredType::NATIVE_FLOAT);
+    candlestick_type_.insertMember("volume", HOFFSET(Candlestick, volume), PredType::NATIVE_INT);
+  } catch (FileIException const &err) {
+    throw err;
+  } catch (DataSetIException const &err) {
+    throw err;
+  }
+}
+
+std::string
+iridium::data::TradeData::DataImpl::dataset_name(
+    const std::string &instrument_name,
+    iridium::data::DataFreq freq) {
+  return instrument_name + "_" + DataFreqToString(freq);
+}
+
+std::shared_ptr<H5::DataSet>
+iridium::data::TradeData::DataImpl::instrument_dataset(
+    const std::string &instrument_name,
+    iridium::data::DataFreq freq) const {
+  return datasets_.at(dataset_name(instrument_name, freq));
+}
+
+std::shared_ptr<std::vector<int>>
+iridium::data::TradeData::DataImpl::time_indices(
+    const std::string &instrument_name,
+    iridium::data::DataFreq freq) const {
+  return time_indices_.at(dataset_name(instrument_name, freq));
+}
+
+int iridium::data::TradeData::DataImpl::time_index(
+    const std::string &instrument_name,
+    std::time_t time,
+    iridium::data::DataFreq freq) const {
+  using iridium::algorithm::BinarySearch;
+  auto index = BinarySearch(
+      *(time_indices(instrument_name, freq).get()),
+      static_cast<int>(time),
+      true);
+  if (index == -1) {
+    throw std::out_of_range("Candlestick Data Not Found");
+  } else {
+    return index;
+  }
+}
+
+std::shared_ptr<iridium::data::DataList>
+iridium::data::TradeData::DataImpl::history_data_(
+    const std::string &instrument_name,
+    std::time_t begin,
+    int count,
+    iridium::data::DataFreq freq,
+    bool reversed = false) const {
+  using H5::DataSpace;
+  auto begin_index = time_index(instrument_name, begin, freq);
+  hsize_t data_start[] =
+      {static_cast<hsize_t>(reversed ? begin_index : begin_index - count + 1)};
+  hsize_t data_count[] = {static_cast<hsize_t>(count)};
+  hsize_t data_stride[] = {1};
+  hsize_t data_block[] = {1};
+  auto dataset = instrument_dataset(instrument_name, freq).get();
+  auto fspace = dataset->getSpace();
+  fspace.selectHyperslab(
+      H5S_SELECT_SET,
+      data_count,
+      data_start,
+      data_stride,
+      data_block);
+  auto candles = std::make_shared<std::vector<data::Candlestick>>(count);
+  hsize_t m_dim[1] = {static_cast<hsize_t>(count)};
+  DataSpace mspace(1, m_dim);
+  dataset->read(
+      candles->data(),
+      candlestick_type_,
+      mspace,
+      fspace);
+  std::sort(std::begin(*candles),
+            std::end(*candles),
+            [](auto c1, auto c2) {
+              return c1.time < c2.time;
+            });
+  return candles;
+}
+
+// TradeData public methods
+iridium::data::TradeData::TradeData(
+    const std::string &file_name,
+    const InstrumentList &instruments,
+    const std::vector<DataFreq> &freqs) :
+    pimpl_(std::move(std::make_unique<DataImpl>(file_name, instruments, freqs))) {}
+
+iridium::data::TradeData::~TradeData() = default;
+
+std::optional<iridium::data::Candlestick>
+iridium::data::TradeData::candlestick_data(
+    const std::string &instrument_name,
+    std::time_t time,
+    iridium::data::DataFreq freq) const {
+  try {
+    return history_data(instrument_name, time, 1, freq)->front();
+  } catch (...) {
+    return std::nullopt;
+  }
+}
+
+std::shared_ptr<iridium::data::TickDataMap>
+iridium::data::TradeData::candlestick_data(
+    const iridium::InstrumentList &instruments,
+    std::time_t time,
+    iridium::data::DataFreq freq) const {
+  auto data_map =
+      std::make_shared<std::map<std::string, std::optional<iridium::data::Candlestick>>>();
+  for (const auto &instrument : instruments) {
+    data_map->insert(
+        {instrument->name(),
+         candlestick_data(instrument->name(), time, freq)});
+  }
+  return data_map;
+}
+
+std::shared_ptr<iridium::data::DataList>
+iridium::data::TradeData::history_data_date_range(
+    const std::string &instrument_name,
+    std::time_t begin,
+    std::time_t end,
+    iridium::data::DataFreq freq) const {
+  auto begin_index = pimpl_->time_index(instrument_name, begin, freq);
+  auto end_index = pimpl_->time_index(instrument_name, end, freq);
+  return pimpl_->history_data_(
+      instrument_name,
+      begin,
+      begin_index - end_index + 1,
+      freq);
+}
+
+std::shared_ptr<iridium::data::DataList>
+iridium::data::TradeData::history_data(
+    const std::string &instrument_name,
+    std::time_t end,
+    int count,
+    iridium::data::DataFreq freq) const {
+  return pimpl_->history_data_(
+      instrument_name,
+      end,
+      count,
+      freq,
+      true);
+}
+
+std::shared_ptr<iridium::data::DataListMap>
+iridium::data::TradeData::history_data(
+    const InstrumentList &instruments,
+    std::time_t end,
+    int count,
+    iridium::data::DataFreq freq) const {
+  auto hist_data_map =
+      std::make_shared<std::map<std::string,
+                                std::shared_ptr<std::vector<iridium::data::Candlestick>>>>();
+  for (const auto &instrument : instruments) {
+    hist_data_map->insert({instrument->name(), history_data(instrument->name(), end, count, freq)});
+  }
+  return hist_data_map;
 }

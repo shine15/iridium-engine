@@ -23,8 +23,7 @@ limitations under the License.
 #include "algorithm.hpp"
 #include "util.hpp"
 
-namespace iridium {
-namespace data {
+namespace iridium::data {
 enum DataFreq {
   m1 = 60,
   m2 = 2 * m1,
@@ -64,20 +63,22 @@ using DataList = std::vector<Candlestick>;
 
 std::shared_ptr<std::vector<double>> candlestick_closes(const std::vector<Candlestick> &dataList);
 
-class HDF5Data {
+class TradeData {
  public:
-  HDF5Data(
+  TradeData(
       const std::string &file_name,
       const InstrumentList &instruments,
       const std::vector<DataFreq> &freqs);
 
+  ~TradeData();
+
   [[nodiscard]]
   std::optional<Candlestick>
-  candlestickData(const std::string &instrument_name, std::time_t time, DataFreq freq) const;
+  candlestick_data(const std::string &instrument_name, std::time_t time, DataFreq freq) const;
 
   [[nodiscard]]
   std::shared_ptr<TickDataMap>
-  candlestickData(const InstrumentList &instruments, std::time_t time, DataFreq freq) const;
+  candlestick_data(const InstrumentList &instruments, std::time_t time, DataFreq freq) const;
 
   [[nodiscard]]
   std::shared_ptr<DataList>
@@ -104,50 +105,13 @@ class HDF5Data {
       DataFreq freq) const;
 
  private:
-  std::unique_ptr<H5::H5File> file_;
-
-  std::vector<std::shared_ptr<Instrument>> instruments_;
-
-  std::vector<DataFreq> freqs_;
-
-  std::map<std::string, std::shared_ptr<std::vector<int>>> time_indices_;
-
-  std::map<std::string, std::shared_ptr<H5::DataSet>> datasets_;
-
-  H5::CompType candlestick_type_;
-
-  [[nodiscard]]
-  int time_index(
-      const std::string &instrument_name,
-      std::time_t time,
-      DataFreq freq) const;
-
-  [[nodiscard]]
-  std::shared_ptr<H5::DataSet>
-  instrument_dataset(const std::string &instrument_name, DataFreq freq) const;
-
-  [[nodiscard]]
-  std::string
-  dataset_name(const std::string &instrument_name, DataFreq freq) const;
-
-  [[nodiscard]]
-  std::shared_ptr<std::vector<int>>
-  time_indices(const std::string &instrument_name, DataFreq freq) const;
-
-  [[nodiscard]]
-  std::shared_ptr<DataList> history_data_(
-      const std::string &instrument_name,
-      std::time_t begin,
-      int count,
-      DataFreq freq,
-      bool reversed) const;
+  class DataImpl;
+  std::unique_ptr<DataImpl> pimpl_;
 };
 
 std::optional<float>
 account_currency_rate(const std::string &account, const std::string &currency,
                       const TickDataMap &tickDataMap);
-}  // namespace data
-
 }  // namespace iridium
 
 std::ostream &operator<<(std::ostream &os, const iridium::data::Candlestick &candlestick);
