@@ -1,0 +1,44 @@
+build-docker-image: &build-docker-image
+  name: Build docker image
+  command: |
+    docker build \
+     -t live-trading \
+     --build-arg account_type=${ACCOUNT_TYPE} \
+     --build-arg account_token=${ACCOUNT_TOKEN} \
+     --build-arg account_id=${ACCOUNT_ID} \
+     --no-cache .
+
+install-heroku-cli: &install-heroku-cli
+  name: Install Heroku CLI
+  command: |
+    curl https://cli-assets.heroku.com/install-ubuntu.sh | sh
+
+heroku-push-release: &heroku-push-release
+  name: Push image to the registry & Release
+  command: |
+    heroku container:login
+    docker tag live-trading registry.heroku.com/${HEROKU_APP_NAME}/worker
+    docker push registry.heroku.com/${HEROKU_APP_NAME}/worker
+    heroku container:release -a ${HEROKU_APP_NAME} worker
+
+version: 2.1
+jobs:
+  heroku-deployment:
+    docker:
+      - image: cimg/base:2021.04
+    steps:
+      - checkout
+      - setup_remote_docker:
+          version: 20.10.2
+      - run: *build-docker-image
+      - run: *install-heroku-cli
+      - run: *heroku-push-release
+
+workflows:
+  deployment:
+    jobs:
+      - heroku-deployment:
+          filters:
+            branches:
+              only: /release\/.*/
+

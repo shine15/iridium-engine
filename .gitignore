@@ -23,10 +23,19 @@
 # Compiled Static libraries
 *.lai
 *.la
-*.a
-*.lib
 
 # Executables
 *.exe
 *.out
 *.app
+/cmake-build-debug
+
+# Visual Studio
+.vs
+out
+CMakeSettings.json
+
+# Deps
+/deps/boost_1_73_0
+
+cmake-build-release
