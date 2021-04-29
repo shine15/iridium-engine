@@ -85,7 +85,6 @@ class IridiumLive: public Application {
   int main(const std::vector<std::string>& args) {
     try {
       using iridium::instrument_list;
-      auto client = std::make_shared<iridium::Oanda>(env_, token_, account_id_);
       auto instruments = instrument_list({
                                              "AUD_CAD", "AUD_JPY", "AUD_NZD", "AUD_SGD", "AUD_USD",
                                              "CAD_JPY", "CAD_SGD",
@@ -96,8 +95,11 @@ class IridiumLive: public Application {
                                              "USD_CAD", "USD_JPY", "USD_SGD"});
       const auto kHistDataCount = 90;
 
+      auto client = std::make_shared<iridium::Oanda>(env_, token_, account_id_);
       while (true) {
-        auto [hist_data_map, tick_data_map] = client->trade_data(*instruments, kHistDataCount + 1, iridium::data::DataFreq::m15);
+        //auto [hist_data_map, tick_data_map] = client->trade_data(*instruments, kHistDataCount + 1, iridium::data::DataFreq::m15);
+        auto [hist_data_map, tick_data_map] = iridium::trade_data_thread_pool(env_, token_, account_id_, *instruments, kHistDataCount + 1, iridium::data::DataFreq::m15);
+        auto spreads = client->spread(*instruments);
         for (auto const &[name, data] : *tick_data_map) {
           client->FetchAccountDetails();
           SimulateTrade(
@@ -106,11 +108,12 @@ class IridiumLive: public Application {
               *hist_data_map->at(name),
               *tick_data_map,
               kHistDataCount,
-              client);
+              client,
+              spreads->at(name));
         }
         client->FetchAccountDetails();
         client->PrintAccountInfo(std::time(nullptr), *tick_data_map);
-        std::this_thread::sleep_for(std::chrono::minutes (1));
+        std::this_thread::sleep_for(std::chrono::seconds (30));
       }
     } catch (Poco::Exception& exc) {
       std::cerr << exc.displayText() << std::endl;

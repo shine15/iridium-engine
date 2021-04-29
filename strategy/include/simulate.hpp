@@ -33,7 +33,8 @@ void SimulateTrade(
     const iridium::data::DataList &hist_data,
     const iridium::data::TickDataMap &tick_data_map,
     int hist_data_count,
-    const std::shared_ptr<iridium::Account> &account_ptr);
+    const std::shared_ptr<iridium::Account> &account_ptr,
+    double spread);
 
 void TakePosition(
     const std::time_t time,

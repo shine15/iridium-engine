@@ -12,5 +12,8 @@ target_include_directories(iridium_lib PUBLIC ${HDF5_INCLUDE_DIR})
 target_link_libraries(iridium_lib PRIVATE ${HDF5_LIBS})
 
 # Boost
-target_include_directories(iridium_lib PUBLIC ${Boost_INCLUDE_DIRS})
-target_link_libraries(iridium_lib PUBLIC ${BOOST_LIB})
+find_package(Boost 1.75.0 REQUIRED COMPONENTS date_time filesystem)
+if(Boost_FOUND)
+    target_include_directories(iridium_lib PUBLIC ${Boost_INCLUDE_DIRS})
+    target_link_libraries(iridium_lib PUBLIC Boost::date_time Boost::filesystem)
+endif()

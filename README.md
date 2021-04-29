@@ -3,6 +3,8 @@ Iridium C++ engine
 
 Windows: Visual Studio 2019
 
+Install Boost 1.75.0
+
 OPENSSL
 Most Unix systems already have OpenSSL preinstalled. If your system does not have OpenSSL, please get it from the OpenSSL website or another source. You do not have to build OpenSSL yourself — a binary distribution is fine.
 

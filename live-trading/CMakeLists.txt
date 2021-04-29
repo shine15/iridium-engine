@@ -17,3 +17,10 @@ target_include_directories(live-trading PUBLIC ${TA_LIB_INCLUDE_DIR})
 target_link_libraries(
         live-trading PRIVATE ${TA_LIB_STATIC_LIB_PATH}
 )
+
+# Boost
+find_package(Boost 1.75.0 REQUIRED COMPONENTS thread)
+if(Boost_FOUND)
+    target_include_directories(live-trading PUBLIC ${Boost_INCLUDE_DIRS})
+    target_link_libraries(live-trading PRIVATE Boost::thread)
+endif()

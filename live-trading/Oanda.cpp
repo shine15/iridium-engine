@@ -32,7 +32,8 @@ std::unique_ptr<iridium::Oanda::Resp> iridium::Oanda::SendRequest(
     }
   }
   // request init
-  auto req = std::make_unique<Poco::Net::HTTPRequest>(http_method, uri.getPathAndQuery(), Poco::Net::HTTPMessage::HTTP_1_1);
+  auto req =
+      std::make_unique<Poco::Net::HTTPRequest>(http_method, uri.getPathAndQuery(), Poco::Net::HTTPMessage::HTTP_1_1);
   // headers
   req->setContentType("application/json");
   if (headers.has_value()) {
@@ -102,7 +103,7 @@ std::unique_ptr<iridium::data::DataList> iridium::Oanda::instrument_data(
   return data_list;
 }
 
-std::tuple<std::unique_ptr<iridium::data::DataListMap>, std::shared_ptr<iridium::data::TickDataMap>>
+std::tuple<std::unique_ptr<iridium::data::DataListMap>, std::unique_ptr<iridium::data::TickDataMap>>
 iridium::Oanda::trade_data(
     const iridium::InstrumentList &instruments,
     int count,
@@ -119,7 +120,7 @@ iridium::Oanda::trade_data(
 }
 
 std::unique_ptr<std::map<std::string, double>>
-    iridium::Oanda::spread(const iridium::InstrumentList &instruments) const {
+iridium::Oanda::spread(const iridium::InstrumentList &instruments) const {
   auto path = "/accounts/" + account_id_ + "/pricing";
   std::map<std::string, std::string> query_params;
   query_params.insert_or_assign("instruments", InstrumentListToString(instruments));
@@ -155,23 +156,30 @@ void iridium::Oanda::CreateMarketOrder(std::time_t create_time,
                                        double financing,
                                        double commission) {
   auto path = "/accounts/" + account_id_ + "/orders";
+  auto pip_num = pip_point(Instrument(instrument));
   Poco::JSON::Object order_obj;
   order_obj.set("units", units);
   order_obj.set("instrument", instrument);
   order_obj.set("type", "MARKET");
+  order_obj.set("timeInForce", "FOK");
+  order_obj.set("positionFill", "DEFAULT");
   if (stop_loss_price.has_value()) {
     Poco::JSON::Object stop_loss_obj;
-    stop_loss_obj.set("price", stop_loss_price.value());
+    stop_loss_obj.set("price", To_String_With_Precision(stop_loss_price.value(), pip_num));
+    stop_loss_obj.set("timeInForce", "GTC");
     order_obj.set("stopLossOnFill", stop_loss_obj);
   }
   if (take_profit_price.has_value()) {
     Poco::JSON::Object take_profit_obj;
-    take_profit_obj.set("price", take_profit_price.value());
+    take_profit_obj.set("price", To_String_With_Precision(take_profit_price.value(), pip_num));
+    take_profit_obj.set("timeInForce", "GTC");
     order_obj.set("takeProfitOnFill", take_profit_obj);
   }
   Poco::JSON::Object req_body;
   req_body.set("order", order_obj);
-  SendRequest(path, Poco::Net::HTTPRequest::HTTP_POST, std::nullopt, req_body);
+  auto resp = SendRequest(path, Poco::Net::HTTPRequest::HTTP_POST, std::nullopt, req_body);
+  std::cout << resp->status << std::endl;
+  std::cout << resp->body << std::endl;
 }
 
 void iridium::Oanda::CloserPosition(const std::string &instrument,
@@ -273,8 +281,9 @@ iridium::Oanda::open_trades_ptr(const std::string &instrument) const {
       account_details_->trades->end(),
       std::back_inserter(*open_trades),
       [instrument](const auto &trade) {
-        return trade->instrument == instrument && trade->state == "OPEN";}
-        );
+        return trade->instrument == instrument && trade->state == "OPEN";
+      }
+  );
   return open_trades;
 }
 
@@ -294,4 +303,28 @@ void iridium::Oanda::PrintAccountInfo(std::time_t tick, const iridium::data::Tic
             << " Margin Used: " << account_details_->margin_used
             << " Margin Available: " << account_details_->margin_available
             << std::endl;
+}
+
+std::tuple<std::shared_ptr<iridium::data::DataListMap>, std::shared_ptr<iridium::data::TickDataMap>>
+iridium::trade_data_thread_pool(
+    iridium::Oanda::Env env,
+    const std::string &token,
+    const std::string &account_id,
+    const iridium::InstrumentList &instruments,
+    int count,
+    iridium::data::DataFreq freq) {
+  auto hist_data_map = std::make_shared<iridium::data::DataListMap>();
+  auto tick_data_map = std::make_shared<iridium::data::TickDataMap>();
+  boost::asio::thread_pool pool(instruments.size());
+  for (const auto &instrument : instruments) {
+    boost::asio::post(pool, [env, token, account_id, instrument, count, freq, tick_data_map, hist_data_map]() {
+      auto client = std::make_unique<iridium::Oanda>(env, token, account_id);
+      auto data = client->instrument_data(instrument->name(), count, freq);
+      tick_data_map->insert({instrument->name(), data->back()});
+      data->pop_back();
+      hist_data_map->insert({instrument->name(), std::move(data)});
+    });
+  }
+  pool.join();
+  return std::make_tuple(hist_data_map, tick_data_map);
 }

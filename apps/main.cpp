@@ -29,11 +29,11 @@ int main() {
   auto hdf5_file_path = boost::filesystem::path(getenv("HOME"));
   hdf5_file_path += "/.iridium/data/history.h5";
   const auto kBeginYear = 2021;
-  const auto kBeginMonth = 1;
-  const auto kBeginDay = 1;
+  const auto kBeginMonth = 4;
+  const auto kBeginDay = 26;
   const auto kEndYear = 2021;
-  const auto kEndMonth = 3;
-  const auto kEndDay = 5;
+  const auto kEndMonth = 4;
+  const auto kEndDay = 29;
   const auto kRegion = "Australia/Sydney";
   const auto kHistFreq = "M15";
   const auto kTickFreq = "M1";
@@ -42,6 +42,7 @@ int main() {
   const auto kAccountCurrency = "USD";
   const auto kCapitalBase = 2000.00;
   const auto kLeverage = 50;
+  const auto kSpread = 3.0;
 
   auto csv_file_path = boost::filesystem::path(getenv("HOME"));
   csv_file_path += "/.iridium/report.csv";
@@ -87,7 +88,8 @@ int main() {
                 *hist_data_map->at(name),
                 *data_map,
                 kHistDataCount,
-                account_ptr);
+                account_ptr,
+                kSpread);
           } else {
             continue;
           }

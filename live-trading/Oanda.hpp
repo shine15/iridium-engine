@@ -21,8 +21,12 @@
 #include <Poco/Dynamic/Var.h>
 #include <Poco/JSON/Object.h>
 #include <Poco/JSON/Array.h>
+#include <boost/asio/thread_pool.hpp>
+#include <boost/asio.hpp>
 #include <iridium/data.hpp>
 #include <iridium/account.hpp>
+#include <iridium/util.hpp>
+#include <iridium/instrument.hpp>
 
 namespace iridium {
 class Oanda: public Account {
@@ -86,7 +90,7 @@ class Oanda: public Account {
       iridium::data::DataFreq freq) const;
 
   [[nodiscard]]
-  std::tuple<std::unique_ptr<iridium::data::DataListMap>, std::shared_ptr<iridium::data::TickDataMap>>
+  std::tuple<std::unique_ptr<iridium::data::DataListMap>, std::unique_ptr<iridium::data::TickDataMap>>
   trade_data(
       const InstrumentList &instruments,
       int count,
@@ -155,6 +159,16 @@ class Oanda: public Account {
   static const std::string kPracticeBaseURL;
   static const std::string kLiveBaseURL;
 };
+
+std::tuple<std::shared_ptr<iridium::data::DataListMap>, std::shared_ptr<iridium::data::TickDataMap>>
+trade_data_thread_pool(
+    iridium::Oanda::Env env,
+    const std::string &token,
+    const std::string &account_id,
+    const iridium::InstrumentList &instruments,
+    int count,
+    iridium::data::DataFreq freq);
+
 }  // namespace iridium
 
 

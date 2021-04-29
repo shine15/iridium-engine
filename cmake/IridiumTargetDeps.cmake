@@ -3,6 +3,7 @@ FILE(COPY resources DESTINATION "${CMAKE_BINARY_DIR}")
 
 set(DEPS_DIR ${PROJECT_SOURCE_DIR}/deps)
 
+# Use linux docker image for live trading deployment
 if (UNIX AND NOT APPLE)
     set(LINUX TRUE)
 endif ()
@@ -54,7 +55,6 @@ if (UNIX)
                 ${HDF5_LIB_DIR}/libz.a
                 ${HDF5_LIB_DIR}/libszip.a)
     endif ()
-
 endif ()
 
 # TA Lib
@@ -64,11 +64,9 @@ if (LINUX)
 else ()
     set(TA_LIB_DIR ${DEPS_DIR}/ta-lib/lib)
     set(TA_LIB_INCLUDE_DIR ${DEPS_DIR}/ta-lib/include)
-
     if (UNIX)
         set(TA_LIB_STATIC_LIB_PATH ${TA_LIB_DIR}/libta_lib.a)
     endif ()
-
     if (WIN32)
         set(TA_LIB_STATIC_LIB_PATH
                 ${TA_LIB_DIR}/ta_abstract_cdr.lib
@@ -76,30 +74,4 @@ else ()
                 ${TA_LIB_DIR}/ta_func_cdr.lib
                 ${TA_LIB_DIR}/ta_libc_cdr.lib)
     endif ()
-endif ()
-
-# Boost
-set(Boost_INCLUDE_DIRS ${DEPS_DIR}/boost_1_73_0)
-set(Boost_LIB_DIR ${Boost_INCLUDE_DIRS}/lib)
-
-if (EXISTS ${Boost_INCLUDE_DIRS})
-    message("Boost was unzipped")
-else ()
-    message("-- Extract the Boost zip file... It needs some time please wait to finish")
-    execute_process(COMMAND ${CMAKE_COMMAND} -E tar -xf boost_1_73_0.7z
-            WORKING_DIRECTORY ${DEPS_DIR})
-    message("-- Finished extracting the Boost zip file ")
-endif ()
-
-if (WIN32)
-    if (${CMAKE_BUILD_TYPE} MATCHES "Debug")
-        set(BOOST_LIB ${Boost_LIB_DIR}/lib64-msvc-14.2/libboost_date_time-vc142-mt-gd-x64-1_73.lib)
-    endif ()
-    if (${CMAKE_BUILD_TYPE} MATCHES "Release")
-        set(BOOST_LIB ${Boost_LIB_DIR}/lib64-msvc-14.2/libboost_date_time-vc142-mt-x64-1_73.lib)
-    endif ()
-endif ()
-
-if (UNIX)
-    set(BOOST_LIB ${Boost_LIB_DIR}/stage/lib/libboost_date_time.a)
 endif ()

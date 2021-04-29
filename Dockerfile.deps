@@ -1,6 +1,10 @@
-FROM gcc:10.3
-RUN apt-get update && apt-get install -y cmake
-RUN apt-get install openssl libssl-dev
+FROM ubuntu
+
+ARG DEBIAN_FRONTEND=noninteractive
+
+# GCC & Cmake
+RUN apt-get update \
+    && apt install -y build-essential cmake openssl libssl-dev wget git
 
 # TA-Lib
 RUN cd ~ \
@@ -21,3 +25,14 @@ RUN cd ~ \
 
 # Poco
 RUN apt-get -y install libpoco-dev
+
+# Boost
+RUN cd ~ \
+    && wget https://ixpeering.dl.sourceforge.net/project/boost/boost/1.75.0/boost_1_75_0.tar.bz2 \
+    && tar -xvf boost_1_75_0.tar.bz2 \
+    && cd boost_1_75_0 \
+    && ./bootstrap.sh \
+    && ./b2 install
+
+# Remove all download files
+RUN rm -rf ~/*
