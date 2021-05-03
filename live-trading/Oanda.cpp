@@ -2,7 +2,7 @@
 // Created by Evan Su on 20/3/21.
 //
 
-#include "Oanda.hpp"
+#include "oanda.hpp"
 
 const std::string iridium::Oanda::kPracticeBaseURL("https://api-fxpractice.oanda.com/v3");
 const std::string iridium::Oanda::kLiveBaseURL("https://api-fxtrade.oanda.com/v3");
@@ -186,11 +186,20 @@ void iridium::Oanda::CloserPosition(const std::string &instrument,
                                     double rate,
                                     double current_price,
                                     std::time_t time) {
-  auto path = "/accounts/" + account_id_ + "/positions/" + instrument + "/close";
-  Poco::JSON::Object req_body;
-  req_body.set("longUnits", "ALL");
-  req_body.set("shortUnits", "ALL");
-  SendRequest(path, Poco::Net::HTTPRequest::HTTP_PUT, std::nullopt, req_body);
+  auto trades = account_details_->trades;
+  for (const auto &trade : *trades) {
+    if ((trade->instrument == instrument)
+        && (trade->state == "OPEN")) {
+      CloseTrade(trade->trade_id);
+    }
+  }
+}
+
+void iridium::Oanda::CloseTrade(const std::string &trade_id) {
+  auto path = "/accounts/" + account_id_ + "/trades/" + trade_id + "/close";
+  auto resp = SendRequest(path, Poco::Net::HTTPRequest::HTTP_PUT);
+  std::cout << resp->status << std::endl;
+  std::cout << resp->body << std::endl;
 }
 
 void iridium::Oanda::FetchAccountDetails() {

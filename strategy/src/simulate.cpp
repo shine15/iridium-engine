@@ -249,7 +249,7 @@ void SimulateTrade(
       if (
           ma_cross_is_long.has_value()
               && ma_cross_distance_to_last.has_value()
-              && (ma_cross_distance_to_last.value() == 0)
+              && (ma_cross_distance_to_last.value() >= 0)
           ) {
         if ((ma_cross_is_long.value() && account_ptr->position_size(instrument_name) < 0)
             || (!ma_cross_is_long.value() && account_ptr->position_size(instrument_name) > 0))

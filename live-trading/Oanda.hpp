@@ -29,7 +29,7 @@
 #include <iridium/instrument.hpp>
 
 namespace iridium {
-class Oanda: public Account {
+class Oanda : public Account {
  public:
   enum Env { practice, live };
 
@@ -121,6 +121,8 @@ class Oanda: public Account {
       double current_price,
       std::time_t time) override;
 
+  void CloseTrade(const std::string &trade_id);
+
   void FetchAccountDetails();
 
   [[nodiscard]]
@@ -170,6 +172,5 @@ trade_data_thread_pool(
     iridium::data::DataFreq freq);
 
 }  // namespace iridium
-
 
 #endif //IRIDIUM_LIVE_TRADING_OANDA_HPP_

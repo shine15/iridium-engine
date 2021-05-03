@@ -10,7 +10,7 @@
 #include <Poco/Util/Option.h>
 #include <Poco/Util/OptionSet.h>
 #include <Poco/Util/HelpFormatter.h>
-#include "Oanda.hpp"
+#include "oanda.hpp"
 #include "../strategy/include/simulate.hpp"
 
 using Poco::Util::Application;
