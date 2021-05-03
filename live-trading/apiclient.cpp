@@ -2,7 +2,7 @@
 // Created by Evan Su on 20/3/21.
 //
 
-#include "oanda.hpp"
+#include "apiclient.hpp"
 
 const std::string iridium::Oanda::kPracticeBaseURL("https://api-fxpractice.oanda.com/v3");
 const std::string iridium::Oanda::kLiveBaseURL("https://api-fxtrade.oanda.com/v3");
