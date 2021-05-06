@@ -3,6 +3,7 @@ FROM beequant/iridium:1.0
 ARG account_type
 ARG account_token
 ARG account_id
+ARG logger_api_key
 ENV ACCOUNT_TYPE ${account_type}
 ENV ACCOUNT_TOKEN ${account_token}
 ENV ACCOUNT_ID ${account_id}
@@ -15,14 +16,10 @@ RUN mkdir cmake-build-release \
     && cmake -DCMAKE_BUILD_TYPE=Release .. \
     && cd live-trading \
     && make
+# Make bash script executable
+RUN chmod +x run.sh
 # Switch user
-RUN apt-get update \
-    && apt-get install sudo \
-    && useradd -m iridium77 \
-    && usermod -g sudo iridium77 \
-    && echo "iridium77 ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+RUN useradd -m iridium77
 USER iridium77
-CMD /usr/src/app/cmake-build-release/live-trading/live-trading \
-    -e ${ACCOUNT_TYPE} \
-    -t ${ACCOUNT_TOKEN} \
-    -a ${ACCOUNT_ID}
+# Entry point
+CMD ./run.sh

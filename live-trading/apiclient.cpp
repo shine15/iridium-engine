@@ -10,11 +10,13 @@ const std::string iridium::Oanda::kLiveBaseURL("https://api-fxtrade.oanda.com/v3
 iridium::Oanda::Oanda(
     iridium::Oanda::Env env,
     const std::string &token,
-    const std::string &account_id) :
+    const std::string &account_id,
+    const std::string &logger_name) :
     token_(token),
     account_id_(account_id),
     base_url_(env == Env::practice ? kPracticeBaseURL : kLiveBaseURL),
-    session_(std::make_unique<Poco::Net::HTTPSClientSession>(Poco::URI(base_url_).getHost())) {
+    session_(std::make_unique<Poco::Net::HTTPSClientSession>(Poco::URI(base_url_).getHost())),
+    logger_(spdlog::get(logger_name)) {
   session_->setKeepAlive(true);
 }
 
@@ -61,6 +63,12 @@ std::unique_ptr<iridium::Oanda::Resp> iridium::Oanda::SendRequest(
   auto response = std::make_unique<Resp>();
   response->status = resp->getStatus();
   response->body = resp_body->str();
+  // logging error
+  if ((response->status != Poco::Net::HTTPResponse::HTTP_OK) &&
+      (response->status != Poco::Net::HTTPResponse::HTTP_CREATED)) {
+    logger_->error("path: {0}, error code: {1}, error response: {2}", path, response->status, response->body);
+  }
+
   return response;
 }
 
@@ -178,8 +186,7 @@ void iridium::Oanda::CreateMarketOrder(std::time_t create_time,
   Poco::JSON::Object req_body;
   req_body.set("order", order_obj);
   auto resp = SendRequest(path, Poco::Net::HTTPRequest::HTTP_POST, std::nullopt, req_body);
-  std::cout << resp->status << std::endl;
-  std::cout << resp->body << std::endl;
+  logger_->info("create a trade, status code: {0}, response: {1}", resp->status, resp->body);
 }
 
 void iridium::Oanda::CloserPosition(const std::string &instrument,
@@ -198,8 +205,7 @@ void iridium::Oanda::CloserPosition(const std::string &instrument,
 void iridium::Oanda::CloseTrade(const std::string &trade_id) {
   auto path = "/accounts/" + account_id_ + "/trades/" + trade_id + "/close";
   auto resp = SendRequest(path, Poco::Net::HTTPRequest::HTTP_PUT);
-  std::cout << resp->status << std::endl;
-  std::cout << resp->body << std::endl;
+  logger_->info("close a trade, status code: {0}, resp: {1}", path, resp->status, resp->body);
 }
 
 void iridium::Oanda::FetchAccountDetails() {
@@ -207,6 +213,7 @@ void iridium::Oanda::FetchAccountDetails() {
   std::map<std::string, std::string> headers;
   headers.insert_or_assign("Accept-Datetime-Format", "UNIX");
   auto resp = SendRequest(path, Poco::Net::HTTPRequest::HTTP_GET, std::nullopt, std::nullopt, headers);
+  logger_->info("account details: {0}", resp->body);
   auto account_details = std::make_unique<AccountDetails>();
   if (resp->status == Poco::Net::HTTPResponse::HTTP_OK) {
     Poco::JSON::Parser parser;
@@ -305,20 +312,14 @@ int iridium::Oanda::position_size(const std::string &instrument) const {
   return size;
 }
 
-void iridium::Oanda::PrintAccountInfo(std::time_t tick, const iridium::data::TickDataMap &data_map) const {
-  std::cout << "time: " << TimeToLocalTimeString(tick)
-            << " NAV: " << account_details_->nav
-            << " Balance: " << account_details_->balance
-            << " Margin Used: " << account_details_->margin_used
-            << " Margin Available: " << account_details_->margin_available
-            << std::endl;
-}
+void iridium::Oanda::PrintAccountInfo(std::time_t tick, const iridium::data::TickDataMap &data_map) const {}
 
 std::tuple<std::shared_ptr<iridium::data::DataListMap>, std::shared_ptr<iridium::data::TickDataMap>>
 iridium::trade_data_thread_pool(
     iridium::Oanda::Env env,
     const std::string &token,
     const std::string &account_id,
+    const std::string &logger_name,
     const iridium::InstrumentList &instruments,
     int count,
     iridium::data::DataFreq freq) {
@@ -326,8 +327,8 @@ iridium::trade_data_thread_pool(
   auto tick_data_map = std::make_shared<iridium::data::TickDataMap>();
   boost::asio::thread_pool pool(instruments.size());
   for (const auto &instrument : instruments) {
-    boost::asio::post(pool, [env, token, account_id, instrument, count, freq, tick_data_map, hist_data_map]() {
-      auto client = std::make_unique<iridium::Oanda>(env, token, account_id);
+    boost::asio::post(pool, [env, token, account_id, logger_name, instrument, count, freq, tick_data_map, hist_data_map]() {
+      auto client = std::make_unique<iridium::Oanda>(env, token, account_id, logger_name);
       auto data = client->instrument_data(instrument->name(), count, freq);
       tick_data_map->insert({instrument->name(), data->back()});
       data->pop_back();
