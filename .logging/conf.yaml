@@ -1,0 +1,6 @@
+#Log section
+logs:
+  - type: file
+    path: /var/log/iridium/*.log
+    service: iridium
+    source: cpp

@@ -34,5 +34,12 @@ RUN cd ~ \
     && ./bootstrap.sh \
     && ./b2 install
 
+# spdlog
+RUN cd ~ \
+    && git clone https://github.com/gabime/spdlog.git \
+    && cd spdlog && mkdir build && cd build \
+    && cmake .. && make -j \
+    && make install
+
 # Remove all download files
 RUN rm -rf ~/*

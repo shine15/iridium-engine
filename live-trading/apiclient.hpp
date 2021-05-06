@@ -23,6 +23,7 @@
 #include <Poco/JSON/Array.h>
 #include <boost/asio/thread_pool.hpp>
 #include <boost/asio.hpp>
+#include <spdlog/spdlog.h>
 #include <iridium/data.hpp>
 #include <iridium/account.hpp>
 #include <iridium/util.hpp>
@@ -73,7 +74,8 @@ class Oanda : public Account {
   Oanda(
       Env env,
       const std::string &token,
-      const std::string &account_id);
+      const std::string &account_id,
+      const std::string &logger_name);
 
   std::unique_ptr<Resp> SendRequest(
       const std::string &path,
@@ -158,6 +160,7 @@ class Oanda : public Account {
   std::string account_id_;
   std::unique_ptr<Poco::Net::HTTPSClientSession> session_;
   std::unique_ptr<AccountDetails> account_details_;
+  std::shared_ptr<spdlog::logger> logger_;
   static const std::string kPracticeBaseURL;
   static const std::string kLiveBaseURL;
 };
@@ -167,6 +170,7 @@ trade_data_thread_pool(
     iridium::Oanda::Env env,
     const std::string &token,
     const std::string &account_id,
+    const std::string &logger_name,
     const iridium::InstrumentList &instruments,
     int count,
     iridium::data::DataFreq freq);

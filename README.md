@@ -39,3 +39,8 @@ docker build \
  docker tag live-trading registry.heroku.com/iridium77/worker
  docker push registry.heroku.com/iridium77/worker
  heroku container:release -a iridium77 worker
+ 
+ Logging
+ git clone https://github.com/gabime/spdlog.git
+ cd spdlog && mkdir build && cd build
+ cmake .. && make -j && make install

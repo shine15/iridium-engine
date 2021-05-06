@@ -24,3 +24,9 @@ if(Boost_FOUND)
     target_include_directories(live-trading PUBLIC ${Boost_INCLUDE_DIRS})
     target_link_libraries(live-trading PRIVATE Boost::thread)
 endif()
+
+# Logging
+if(NOT TARGET spdlog)
+    find_package(spdlog REQUIRED)
+endif()
+target_link_libraries(live-trading PRIVATE spdlog::spdlog)

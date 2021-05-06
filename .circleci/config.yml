@@ -6,6 +6,7 @@ build-docker-image: &build-docker-image
      --build-arg account_type=${ACCOUNT_TYPE} \
      --build-arg account_token=${ACCOUNT_TOKEN} \
      --build-arg account_id=${ACCOUNT_ID} \
+     --build-arg logger_api_key=${LOGGER_API_KEY} \
      --no-cache .
 
 install-heroku-cli: &install-heroku-cli
