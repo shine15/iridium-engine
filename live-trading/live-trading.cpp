@@ -10,7 +10,6 @@
 #include <Poco/Util/Option.h>
 #include <Poco/Util/OptionSet.h>
 #include <Poco/Util/HelpFormatter.h>
-#include <spdlog/sinks/rotating_file_sink.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
 #include "apiclient.hpp"
 #include "../strategy/include/simulate.hpp"
@@ -86,13 +85,7 @@ class IridiumLive: public Application {
 
   int main(const std::vector<std::string>& args) {
     // Logging
-    auto max_size = 1048576 * 5;
-    auto max_files = 3;
-    auto logger_name = "iridium_logger";
-    // rotating file logger
-    // auto logger = spdlog::rotating_logger_mt(logger_name, "/var/log/iridium/live_trading.log", max_size, max_files);
-    // console logger
-    auto logger = spdlog::stdout_color_mt(logger_name);
+    auto logger = iridium::logger();
 
     try {
       using iridium::instrument_list;
@@ -106,9 +99,10 @@ class IridiumLive: public Application {
                                              "USD_CAD", "USD_JPY", "USD_SGD"});
       const auto kHistDataCount = 90;
 
-      auto client = std::make_shared<iridium::Oanda>(env_, token_, account_id_, logger_name);
+      auto client = std::make_shared<iridium::Oanda>(env_, token_, account_id_);
       while (true) {
-        auto [hist_data_map, tick_data_map] = iridium::trade_data_thread_pool(env_, token_, account_id_, logger_name, *instruments, kHistDataCount + 1, iridium::data::DataFreq::m15);
+        auto [hist_data_map, tick_data_map] = iridium::trade_data_thread_pool(
+            env_, token_, account_id_, *instruments, kHistDataCount + 1, iridium::data::DataFreq::m15);
         auto spreads = client->spread(*instruments);
         for (auto const &[name, data] : *tick_data_map) {
           client->FetchAccountDetails();
@@ -122,7 +116,6 @@ class IridiumLive: public Application {
               spreads->at(name));
         }
         client->FetchAccountDetails();
-        client->PrintAccountInfo(std::time(nullptr), *tick_data_map);
         std::this_thread::sleep_for(std::chrono::seconds (30));
       }
     } catch (Poco::Exception &exc) {

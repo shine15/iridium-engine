@@ -20,8 +20,12 @@ void SimulateTrade(
     int hist_data_count,
     const std::shared_ptr<iridium::Account> &account_ptr,
     double spread) {
+  // logging
+  auto logger = iridium::logger();
+
   // Trade simulation settings
   const auto kMinTradeSize = 1000;
+  const auto kMaxSpread = 3.0;
 
   // MA strategy settings
   const auto kFastPeriod = 12;
@@ -38,28 +42,28 @@ void SimulateTrade(
   const auto kATRPeriod = 14;
 
   // risk control settings
-  const auto kMaxPositionValuePctPerTrade = 0.1;
   const auto kRiskPct = 0.005;
+  const auto kProhibitPct = 0.06;
+
+  // profit/loss ratio
+  const auto kProfitLossRatio = 2;
+
+  // local time
+  auto local_time = TimeToLocalTimeString(tick);
 
   // check data availability
   auto instrument = std::make_shared<iridium::Instrument>(instrument_name);
   auto base = instrument->base_name();
   auto quote = instrument->quote_name();
   auto pip_num = pip_point(*instrument);
-  auto account_base_rate = iridium::data::account_currency_rate(
-      account_ptr->account_currency(),
-      base,
-      tick_data_map);
-  auto account_quote_rate = iridium::data::account_currency_rate(
+  auto acc_quote_rate = iridium::data::account_currency_rate(
       account_ptr->account_currency(),
       quote,
       tick_data_map);
   auto current_price = tick_data_map.at(instrument_name).value().close;
 
-  if (account_base_rate.has_value() && account_quote_rate.has_value()) {
-    auto account_base_rate_value = account_base_rate.value();
-    auto account_quote_rate_value = account_quote_rate.value();
-
+  if (acc_quote_rate.has_value()) {
+    auto acc_quote_rate_value = acc_quote_rate.value();
     auto closes = candlestick_closes(hist_data);
     auto highs = candlestick_highs(hist_data);
     auto lows = candlestick_lows(hist_data);
@@ -168,7 +172,7 @@ void SimulateTrade(
         atr_out->data());
     auto atr = atr_out->at(atr_out_num - 1);
 
-    if (!account_ptr->HasOpenTrades(instrument_name)) {
+    if (!account_ptr->HasPendingOrders(instrument_name) && !account_ptr->HasOpenTrades(instrument_name)) {
       if (
           ma_cross_is_long.has_value()
               && ma_cross_distance_to_last.has_value()
@@ -190,28 +194,42 @@ void SimulateTrade(
           auto highest_after_cross = std::max_element(sliced_highs_after_cross.begin(), sliced_highs_after_cross.end());
           if (
               (*highest_after_cross > nearest_peak_high_before_cross.value())
-                  && (current_price >= slow_out->back())
-                  && (current_price <= fast_out->back())
+                  && (current_price > slow_out->back())
+                  && (current_price < fast_out->back())
                   && (fast_out->back() > slow_out->back())
                   && (slow_out->back() > stop_loss_out->back())
                   && (current_price > nearest_peak_high_before_cross.value())
               ) {
             auto stop_loss_price = stop_loss_out->back() - atr;
-            TakePosition(
-                tick,
-                instrument_name,
+            auto order_price = highs->back();
+            auto take_profit_price = order_price + kProfitLossRatio * (order_price - stop_loss_price);
+            auto units = CalculateLimitOrderUnits(
                 account_ptr,
                 tick_data_map,
-                kMaxPositionValuePctPerTrade,
-                kRiskPct,
+                order_price,
                 stop_loss_price,
-                current_price,
-                account_quote_rate_value,
-                account_base_rate_value,
+                acc_quote_rate.value(),
+                kRiskPct,
                 pip_num,
                 false,
-                kMinTradeSize,
-                spread);
+                kMinTradeSize);
+            if (0 != units && spread <= kMaxSpread) {
+              account_ptr->CreateLimitOrder(
+                  tick,
+                  instrument_name,
+                  units,
+                  order_price,
+                  take_profit_price,
+                  stop_loss_price);
+              logger->info(
+                  "create limit order - instrument: {}, time: {}, units: {}, order price: {}, take profit price: {}, stop loss price: {}",
+                  instrument_name,
+                  local_time,
+                  units,
+                  order_price,
+                  take_profit_price,
+                  stop_loss_price);
+            }
           }
         }
         // Cross down pullback
@@ -220,99 +238,147 @@ void SimulateTrade(
           auto lowest_after_cross = std::min_element(sliced_lows_after_cross.begin(), sliced_lows_after_cross.end());
           if (
               (*lowest_after_cross < nearest_peak_low_before_cross.value())
-                  && (current_price <= slow_out->back())
-                  && (current_price >= fast_out->back())
+                  && (current_price < slow_out->back())
+                  && (current_price > fast_out->back())
                   && (fast_out->back() < slow_out->back())
                   && (slow_out->back() < stop_loss_out->back())
                   && (current_price < nearest_peak_low_before_cross.value())
               ) {
             auto stop_loss_price = stop_loss_out->back() + atr;
-            TakePosition(
-                tick,
-                instrument_name,
+            auto order_price = lows->back();
+            auto take_profit_price = order_price - kProfitLossRatio * (stop_loss_price - order_price);
+            auto units = CalculateLimitOrderUnits(
                 account_ptr,
                 tick_data_map,
-                kMaxPositionValuePctPerTrade,
-                kRiskPct,
+                order_price,
                 stop_loss_price,
-                current_price,
-                account_quote_rate_value,
-                account_base_rate_value,
+                acc_quote_rate.value(),
+                kRiskPct,
                 pip_num,
                 true,
-                kMinTradeSize,
-                spread);
+                kMinTradeSize);
+            if (0 != units && spread <= kMaxSpread) {
+              account_ptr->CreateLimitOrder(
+                  tick,
+                  instrument_name,
+                  units,
+                  order_price,
+                  take_profit_price,
+                  stop_loss_price);
+              logger->info(
+                  "create limit order - instrument: {}, time: {}, units: {}, order price: {}, take profit price: {}, stop loss price: {}",
+                  instrument_name,
+                  local_time,
+                  units,
+                  order_price,
+                  take_profit_price,
+                  stop_loss_price);
+            }
           }
         }
       }
-    } else {
+    }
+
+    if (account_ptr->HasPendingOrders(instrument_name)) {
+      auto pending_limit_orders_ptr = account_ptr->pending_limit_orders_ptr(instrument_name);
+      for (const auto &order_ptr : *pending_limit_orders_ptr) {
+        if ((order_ptr->units() > 0 && current_price < stop_loss_out->back()) ||
+            (order_ptr->units() < 0 && current_price > stop_loss_out->back())) {
+          account_ptr->CancelLimitOrder(order_ptr);
+          logger->info(
+              "cancel pending limit order - instrument: {}, time: {}, units: {}, order price: {}, take profit price: {}, stop loss price: {}",
+              order_ptr->instrument_ptr()->name(),
+              local_time,
+              order_ptr->units(),
+              order_ptr->price(),
+              order_ptr->take_profit_price().value(),
+              order_ptr->stop_loss_price().value());
+        }
+      }
+    }
+
+    if (account_ptr->HasOpenTrades(instrument_name)) {
+      // close position
       if (
           ma_cross_is_long.has_value()
               && ma_cross_distance_to_last.has_value()
               && (ma_cross_distance_to_last.value() >= 0)
           ) {
-        if ((ma_cross_is_long.value() && account_ptr->position_size(instrument_name) < 0)
-            || (!ma_cross_is_long.value() && account_ptr->position_size(instrument_name) > 0))
-          ClosePosition(instrument_name, account_ptr, account_quote_rate_value, current_price, tick);
+        if ((ma_cross_is_long.value() && account_ptr->open_position_size(instrument_name) < 0)
+            || (!ma_cross_is_long.value() && account_ptr->open_position_size(instrument_name) > 0)) {
+          ClosePosition(instrument_name, account_ptr, acc_quote_rate_value, current_price, tick);
+          logger->info(
+              "close position - instrument: {}, time: {}",
+              instrument_name,
+              local_time);
+        }
       }
     }
-  }
-}
+    // update stop loss price
+    auto open_trades_ptr = account_ptr->open_trades_ptr(instrument_name);
+    for (const auto &trade_ptr : *open_trades_ptr) {
+      auto units = trade_ptr->current_units();
+      auto price = trade_ptr->price();
+      auto stop_loss_price = trade_ptr->stop_loss_price();
+      if (stop_loss_price.has_value()) {
+        auto stop_loss_change = abs(price - stop_loss_price.value());
+        // break even
+        if (units > 0 &&
+            (current_price - price) >= stop_loss_change &&
+            stop_loss_price < price) {
+          account_ptr->UpdateTradeStopLossPrice(trade_ptr, price, tick);
+          logger->info(
+              "break even - instrument: {}, time: {}",
+              instrument_name,
+              local_time);
+        }
+        if (units < 0 &&
+            (price - current_price) >= stop_loss_change &&
+            stop_loss_price > price) {
+          account_ptr->UpdateTradeStopLossPrice(trade_ptr, price, tick);
+          logger->info(
+              "break even - instrument: {}, time: {}",
+              instrument_name,
+              local_time);
+        }
+      }
 
-void TakePosition(
-    const std::time_t time,
-    const std::string &instrument,
-    const std::shared_ptr<iridium::Account> &account_ptr,
-    const iridium::data::TickDataMap &tick_data_map,
-    double max_position_value_pct_per_trade,
-    double risk_pct,
-    double stop_loss_price,
-    double current_price,
-    double account_quote_rate,
-    double account_base_rate,
-    int pip_num,
-    bool is_short,
-    int min_size,
-    double spread) {
-  if (spread > 3) return;
-  auto equity = account_ptr->net_asset_value(tick_data_map);
-  auto margin_used = account_ptr->margin_used(tick_data_map);
-  if (equity.has_value() && margin_used.has_value()) {
-    auto margin_available = iridium::CalculateMarginAvailable(equity.value(), margin_used.value());
-    auto[size, calculated_stop_loss_price] = CalculateStopLossPositionSize(
-        equity.value(),
-        max_position_value_pct_per_trade,
-        margin_available,
-        account_ptr->leverage(),
-        risk_pct,
-        stop_loss_price,
-        current_price,
-        account_quote_rate,
-        pip_num,
-        is_short,
-        min_size,
-        spread);
-    if (0 != size) {
-      account_ptr->CreateMarketOrder(
-          time,
-          margin_available,
-          instrument,
-          size,
-          current_price,
-          account_quote_rate,
-          account_base_rate,
-          spread,
-          std::nullopt,
-          calculated_stop_loss_price,
-          std::nullopt);
     }
   }
 }
 
 void ClosePosition(const std::string &instrument,
                    const std::shared_ptr<iridium::Account> &account_ptr,
-                   double account_quote_rate,
+                   double acc_quote_rate,
                    double current_price,
                    std::time_t time) {
-  account_ptr->CloserPosition(instrument, account_quote_rate, current_price, time);
+  account_ptr->CloserPosition(instrument, acc_quote_rate, current_price, time);
+}
+
+int CalculateLimitOrderUnits(
+    const std::shared_ptr<iridium::Account> &account_ptr,
+    const iridium::data::TickDataMap &tick_data_map,
+    double order_price,
+    double stop_loss_price,
+    double acc_quote_rate,
+    double risk_pct,
+    int pip_num,
+    bool is_short,
+    int min_size) {
+  auto equity = account_ptr->net_asset_value(tick_data_map);
+  auto margin_used = account_ptr->margin_used(tick_data_map);
+  if (equity.has_value() && margin_used.has_value()) {
+    return CalculatePositionSize(
+        equity.value(),
+        margin_used.value(),
+        account_ptr->leverage(),
+        risk_pct,
+        stop_loss_price,
+        order_price,
+        acc_quote_rate,
+        pip_num,
+        is_short,
+        min_size);
+  }
+  return 0;
 }

@@ -172,13 +172,13 @@ class Order {
   std::time_t create_time_;
 };
 
-class MarketOrderRequest {
+class LimitOrder: public Order {
  public:
-  MarketOrderRequest(
+  LimitOrder(
       std::time_t create_time,
       const std::string &instrument,
       int units,
-      double market_price,
+      double price,
       std::shared_ptr<TakeProfitDetails> take_profit_details =
       std::shared_ptr<TakeProfitDetails>(nullptr),
       std::shared_ptr<StopLossDetails> stop_loss_details =
@@ -186,11 +186,10 @@ class MarketOrderRequest {
       std::shared_ptr<TrailingStopLossDetails> trailing_stop_loss_details =
       std::shared_ptr<TrailingStopLossDetails>(
           nullptr),
-      double price_bound = 0.00,
       OrderPositionFill order_position_fill = OrderPositionFill::kReduceFirst,
       TimeInForce timeInForce = TimeInForce::kGTC);
 
-  MarketOrderRequest(
+  LimitOrder(
       std::time_t create_time,
       const std::string &instrument,
       int units,
@@ -206,10 +205,7 @@ class MarketOrderRequest {
   int units() const noexcept;
 
   [[nodiscard]]
-  double market_price() const noexcept;
-
-  [[nodiscard]]
-  double price_bound() const noexcept;
+  double price() const noexcept;
 
   [[nodiscard]]
   OrderPositionFill order_position_fill() const noexcept;
@@ -229,18 +225,24 @@ class MarketOrderRequest {
   [[nodiscard]]
   const std::shared_ptr<TrailingStopLossDetails> &trailing_stop_loss_details_ptr() const noexcept;
 
-  friend std::ostream &operator<<(std::ostream &os, const MarketOrderRequest &request);
+  [[nodiscard]]
+  std::optional<double> take_profit_price() const noexcept;
+
+  [[nodiscard]]
+  std::optional<double> stop_loss_price() const noexcept;
+
+  [[nodiscard]]
+  std::optional<double> trailing_stop_loss_distance() const noexcept;
+
+  friend std::ostream &operator<<(std::ostream &os, const LimitOrder &request);
 
  private:
-  std::string request_id_;
-  std::time_t create_time_;
   std::shared_ptr<Instrument> instrument_ptr_;
   int units_;
-  double market_price_;
+  double price_;
   std::shared_ptr<TakeProfitDetails> take_profit_details_ptr_;
   std::shared_ptr<StopLossDetails> stop_loss_details_ptr_;
   std::shared_ptr<TrailingStopLossDetails> trailing_stop_loss_details_ptr_;
-  double price_bound_;
   OrderPositionFill order_position_fill_;
   TimeInForce time_in_force_;
 };
@@ -339,6 +341,8 @@ class DistanceTriggerOrder : public TriggerOrder {
 using TrailingStopLossOrder = DistanceTriggerOrder;
 
 using OrderList = std::vector<std::shared_ptr<Order>>;
+
+using LimitOrderList = std::vector<std::shared_ptr<LimitOrder>>;
 
 std::string OrderStateToString(OrderState state);
 }  // namespace iridium

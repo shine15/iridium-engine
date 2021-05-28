@@ -20,10 +20,10 @@ TEST(ForexTest, CalculatePipValue) {
     auto i = std::make_unique<iridium::Instrument>("EUR_USD");
     auto quote = i->quote_name();
     // base account AUD, AUD_USD
-    auto account_quote_rate = 0.6323;
+    auto acc_quote_rate = 0.6323;
     auto units = 10000;
     auto decimals = iridium::pip_point(*(i));
-    auto pip_value = round(iridium::CalculatePipValue(units, account_quote_rate, decimals)
+    auto pip_value = round(iridium::CalculatePipValue(units, acc_quote_rate, decimals)
         * pow(10, 5)) / pow(10, 5);
     EXPECT_EQ(pip_value, 1.58153);
 }
@@ -32,7 +32,7 @@ TEST(ForexTest, CalculateGainLoss) {
     auto i = std::make_unique<iridium::Instrument>("EUR_USD");
     auto quote = i->quote_name();
     // base account AUD, AUD_USD
-    auto account_quote_rate = 0.63168;
+    auto acc_quote_rate = 0.63168;
     auto units = 100000;
     auto decimals = iridium::pip_point(*(i));
     auto open_price = 1.08197;
@@ -41,7 +41,7 @@ TEST(ForexTest, CalculateGainLoss) {
         iridium::CalculateGainsLosses(
             (close_price - open_price) * pow(10, decimals),
             units,
-            account_quote_rate, decimals)
+            acc_quote_rate, decimals)
             * pow(10, 5)) / pow(10, 5);
     EXPECT_EQ(stop_loss, 1.58308);
 }
@@ -51,8 +51,8 @@ TEST(ForexTest, CalculateMarginUsed) {
     auto leverage = 100;
     // account USD, pair EUR_USD, base EUR, quote USD
     auto rate = 1.365;
-    auto account_base_rate = 1 / rate;
-    auto margin_used = iridium::CalculateMarginUsed(units, account_base_rate, leverage);
+    auto acc_base_rate = 1 / rate;
+    auto margin_used = iridium::CalculateMarginUsed(units, acc_base_rate, leverage);
     EXPECT_EQ(margin_used, 6825.00);
 }
 

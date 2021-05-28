@@ -407,11 +407,11 @@ iridium::data::TradeData::history_data(
     std::time_t end,
     int count,
     iridium::data::DataFreq freq) const {
-  auto hist_data_map =
-      std::make_shared<std::map<std::string,
-                                std::shared_ptr<std::vector<iridium::data::Candlestick>>>>();
+  auto hist_data_map = std::make_shared<DataListMap>();
   for (const auto &instrument : instruments) {
-    hist_data_map->insert({instrument->name(), history_data(instrument->name(), end, count, freq)});
+    auto hist_data = history_data(instrument->name(), end, count + 1, freq);
+    hist_data->pop_back();
+    hist_data_map->insert({instrument->name(), hist_data});
   }
   return hist_data_map;
 }

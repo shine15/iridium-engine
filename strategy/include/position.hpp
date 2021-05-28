@@ -22,13 +22,12 @@ limitations under the License.
 
 /*
  * @param equity
- * @param max_position_value_pct_per_trade
- * @param margin_available
+ * @param margin_used
  * @param leverage
  * @param risk_pct
  * @param stop_loss_pips
- * @param current_price
- * @param rate: Account currency vs quote currency rate
+ * @param order_price
+ * @param acc_quote_rate: Account currency vs quote currency rate
  * @param spread
  * @param pip_num
  * @param is_short
@@ -36,45 +35,39 @@ limitations under the License.
  */
 int CalculateStopLossPositionSize(
     double equity,
-    double max_position_value_pct_per_trade,
-    double margin_available,
+    double margin_used,
     int leverage,
     double risk_pct,
     double stop_loss_pips,
-    double current_price,
-    double rate,
+    double order_price,
+    double acc_quote_rate,
     int pip_num,
     bool is_short,
     int min_size);
 
 /*
  * @param equity
- * @param max_position_value_pct_per_trade
  * @param margin_available
  * @param leverage
  * @param risk_pct
  * @param stop_loss_price
- * @param current_price
- * @param rate: Account currency vs quote currency rate
+ * @param order_price
+ * @param acc_quote_rate: Account currency vs quote currency rate
  * @param spread
  * @param pip_num
  * @param is_short
  * @param min_size
- * @param spread
  */
-std::tuple<int, double>
-CalculateStopLossPositionSize(
+int CalculatePositionSize(
     double equity,
-    double max_position_value_pct_per_trade,
-    double margin_available,
+    double margin_used,
     int leverage,
     double risk_pct,
     double stop_loss_price,
-    double current_price,
-    double rate,
+    double order_price,
+    double acc_quote_rate,
     int pip_num,
     bool is_short,
-    int min_size,
-    double spread);
+    int min_size);
 
 #endif  // APPS_POSITION_HPP_

@@ -17,58 +17,52 @@ using iridium::CalculatePositionValue;
 
 int CalculateStopLossPositionSize(
     double equity,
-    double max_position_value_pct_per_trade,
-    double margin_available,
+    double margin_used,
     int leverage,
     double risk_pct,
     double stop_loss_pips,
-    double current_price,
-    double rate,
+    double order_price,
+    double acc_quote_rate,
     int pip_num,
     bool is_short,
     int min_size) {
-  auto size = CalculatePositionSize(equity, risk_pct, stop_loss_pips, rate, pip_num);
-  auto trade_value = CalculatePositionValue(size, current_price, rate);
-  if (margin_available == 0.0 || size < min_size) {
+  auto size = CalculatePositionSize(equity, risk_pct, stop_loss_pips, acc_quote_rate, pip_num);
+  auto trade_value = CalculatePositionValue(size, order_price, acc_quote_rate);
+  auto margin_available = equity - margin_used;
+  if (margin_available == 0.0) {
     size = 0;
   }
   if (trade_value >= margin_available * leverage) {
-    size = static_cast<int>(margin_available * leverage * rate / current_price);
+    size = static_cast<int>(margin_available * leverage * acc_quote_rate / order_price);
   }
-  if (trade_value >= equity * max_position_value_pct_per_trade * leverage) {
-    size = static_cast<int>(
-        equity * max_position_value_pct_per_trade * leverage * rate / current_price);
+  if (size < min_size) {
+    size = 0;
   }
   return size * (is_short ? -1 : 1);
 }
 
-std::tuple<int, double>
-CalculateStopLossPositionSize(
+int CalculatePositionSize(
     double equity,
-    double max_position_value_pct_per_trade,
     double margin_available,
     int leverage,
     double risk_pct,
     double stop_loss_price,
-    double current_price,
-    double rate,
+    double order_price,
+    double acc_quote_rate,
     int pip_num,
     bool is_short,
-    int min_size,
-    double spread) {
-  auto stop_loss_pips = std::round(abs(current_price - stop_loss_price)  * pow(10, pip_num)) + spread;
-  auto calculated_stop_loss_price = current_price - (is_short ? -1 : 1) * (stop_loss_pips - spread) * pow(10, -pip_num);
+    int min_size) {
+  auto stop_loss_pips = std::round(abs(order_price - stop_loss_price)  * pow(10, pip_num));
   auto size = CalculateStopLossPositionSize(
       equity,
-      max_position_value_pct_per_trade,
       margin_available,
       leverage,
       risk_pct,
       stop_loss_pips,
-      current_price,
-      rate,
+      order_price,
+      acc_quote_rate,
       pip_num,
       is_short,
       min_size);
-  return  std::make_tuple(size, calculated_stop_loss_price);
+  return size;
 }

@@ -22,14 +22,12 @@ limitations under the License.
 
 std::string TimeToLocalTimeString(std::time_t rawTime);
 
-template <typename T>
-std::string To_String_With_Precision(const T value, const int n)
-{
+template<typename T>
+std::string To_String_With_Precision(const T value, const int n) {
   std::ostringstream out;
   out.precision(n);
   out << std::fixed << value;
   return out.str();
 }
-
 
 #endif  // INCLUDE_IRIDIUM_UTIL_HPP_

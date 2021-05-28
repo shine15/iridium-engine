@@ -35,7 +35,7 @@ class CSV {
 
 void GenerateTransactionsReport(const SimulationAccount &account, const std::string &csv_file_path) {
   auto csv_ptr = std::make_unique<iridium::data::CSV>(csv_file_path);
-  auto all_trades_ptr = account.all_trades_ptr();
+  auto all_trades_ptr = account.trades_ptr();
   csv_ptr->WriteRow(
       "instrument",
       "state",
@@ -52,12 +52,11 @@ void GenerateTransactionsReport(const SimulationAccount &account, const std::str
       "initial_margin",
       "current_units",
       "open_time_timestamp",
-      "close_time_timestamp",
-      "spread"
+      "close_time_timestamp"
   );
   for (const auto &trade_ptr : *all_trades_ptr) {
-    auto round_decimal = pip_point(*trade_ptr->instrument()) + 1;
-    auto instrument_name = trade_ptr->instrument()->name();
+    auto round_decimal = pip_point(*trade_ptr->instrument_ptr()) + 1;
+    auto instrument_name = trade_ptr->instrument_ptr()->name();
     auto trade_state = TradeStateToString(trade_ptr->trade_state());
     auto realized_profit_loss = To_String_With_Precision(trade_ptr->realized_profit_loss(), 2);
     auto trade_open_time_local = TimeToLocalTimeString(trade_ptr->open_time());
@@ -77,7 +76,6 @@ void GenerateTransactionsReport(const SimulationAccount &account, const std::str
     auto initial_units = trade_ptr->initial_units();
     auto initial_margin = trade_ptr->initial_margin();
     auto current_units = trade_ptr->current_units();
-    auto spread = trade_ptr->spread();
     auto trade_open_time = trade_ptr->open_time();
     auto trade_close_time = trade_ptr->close_time().has_value() ? std::to_string(trade_ptr->close_time().value()) : std::string();
     csv_ptr->WriteRow(
@@ -96,8 +94,7 @@ void GenerateTransactionsReport(const SimulationAccount &account, const std::str
         initial_margin,
         current_units,
         trade_open_time,
-        trade_close_time,
-        spread
+        trade_close_time
         );
   }
 

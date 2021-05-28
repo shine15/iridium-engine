@@ -40,9 +40,6 @@ class Trade {
       std::time_t open_time,
       int initial_units,
       double initial_margin,
-      double spread,
-      double financing = 0.0,
-      double commission = 0.0,
       std::optional<double> take_profit_price = std::nullopt,
       std::optional<double> stop_loss_price = std::nullopt,
       std::optional<double> trailing_stop_distance = std::nullopt);
@@ -51,7 +48,7 @@ class Trade {
   const std::string &trade_id() const noexcept;
 
   [[nodiscard]]
-  const std::shared_ptr<Instrument> &instrument() const noexcept;
+  const std::shared_ptr<Instrument> &instrument_ptr() const noexcept;
 
   [[nodiscard]]
   double price() const noexcept;
@@ -81,15 +78,6 @@ class Trade {
   const std::optional<std::time_t> &close_time() const noexcept;
 
   [[nodiscard]]
-  double spread() const noexcept;
-
-  [[nodiscard]]
-  double financing() const noexcept;
-
-  [[nodiscard]]
-  double commission() const noexcept;
-
-  [[nodiscard]]
   const std::shared_ptr<TakeProfitOrder> &take_profit_order_ptr() const noexcept;
 
   [[nodiscard]]
@@ -110,27 +98,27 @@ class Trade {
   [[nodiscard]]
   std::optional<double> trailing_stop_price() const noexcept;
 
-  void UpdateTakeProfitOrder(double price, std::time_t open_time);
+  void UpdateTakeProfitOrder(double price, std::time_t time);
 
-  void UpdateStopLossOrder(double price, std::time_t open_time);
+  void UpdateStopLossOrder(double price, std::time_t time);
 
-  void UpdateTrailingStopLossOrder(double distance, std::time_t open_time);
+  void UpdateTrailingStopLossOrder(double distance, std::time_t time);
 
   /*
-   * @param rate: account currency vs quote currency rate
-   * @param current_price
+   * @param acc_quote_rate: account currency vs quote currency rate
+   * @param trade_close_price
    * @param units
    */
   [[nodiscard]]
-  double PartiallyCloseTrade(double rate, double current_price, int units);
+  double PartiallyCloseTrade(double acc_quote_rate, double trade_close_price, int units);
 
   /*
-   *  @param rate: account currency vs quote currency rate
-   *  @param current_price
+   *  @param acc_quote_rate: account currency vs quote currency rate
+   *  @param trade_close_price
    *  @param time: trade close time
    */
   [[nodiscard]]
-  double CloseTrade(double rate, double current_price, std::time_t time);
+  double CloseTrade(double acc_quote_rate, double trade_close_price, std::time_t time);
 
   friend std::ostream &operator<<(std::ostream &os, const Trade &trade);
 
@@ -146,9 +134,6 @@ class Trade {
   double realized_profit_loss_;
   std::optional<std::time_t> close_time_;
   std::optional<double> close_price_;
-  double spread_;
-  double financing_;
-  double commission_;
   std::shared_ptr<TakeProfitOrder> take_profit_order_ptr_;
   std::shared_ptr<StopLossOrder> stop_loss_order_ptr_;
   std::shared_ptr<TrailingStopLossOrder> trailing_stop_loss_order_ptr_;
@@ -159,15 +144,12 @@ class Trade {
       std::time_t open_time,
       int initial_units,
       double initial_margin,
-      double spread,
-      double financing = 0.0,
-      double commission = 0.0,
       std::shared_ptr<TakeProfitOrder> take_profit_order_ptr =
-          std::shared_ptr<TakeProfitOrder>(nullptr),
+      std::shared_ptr<TakeProfitOrder>(nullptr),
       std::shared_ptr<StopLossOrder> stop_loss_order_ptr =
-          std::shared_ptr<StopLossOrder>(nullptr),
+      std::shared_ptr<StopLossOrder>(nullptr),
       std::shared_ptr<TrailingStopLossOrder> trailing_stop_loss_order_ptr =
-          std::shared_ptr<TrailingStopLossOrder>(nullptr));
+      std::shared_ptr<TrailingStopLossOrder>(nullptr));
 
   void set_take_profit_price(double price);
 
@@ -185,17 +167,17 @@ class Trade {
 
 /*
  * @param trade
- * @param rate: account currency vs quote currency rate
+ * @param acc_quote_rate: account currency vs quote currency rate
  * @param price: current instrument price
  */
-double CalculateUnrealizedProfitLoss(const Trade &trade, double rate, double current_price);
+double CalculateUnrealizedProfitLoss(const Trade &trade, double acc_quote_rate, double current_price);
 
 /*
  * @param trade
- * @param rate: account currency vs base currency rate
+ * @param acc_base_rate: account currency vs base currency rate
  * @param leverage
  */
-double CalculateMarginUsed(const Trade &trade, double rate, int leverage);
+double CalculateMarginUsed(const Trade &trade, double acc_base_rate, int leverage);
 
 using TradeList = std::vector<std::shared_ptr<Trade>>;
 

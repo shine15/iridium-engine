@@ -18,9 +18,6 @@ iridium::Trade::Trade(
     std::time_t open_time,
     int initial_units,
     double initial_margin,
-    double spread,
-    double financing,
-    double commission,
     std::shared_ptr<TakeProfitOrder> take_profit_order_ptr,
     std::shared_ptr<StopLossOrder> stop_loss_order_ptr,
     std::shared_ptr<TrailingStopLossOrder> trailing_stop_loss_order_ptr) :
@@ -35,12 +32,9 @@ iridium::Trade::Trade(
     realized_profit_loss_(0.00),
     close_time_(std::nullopt),
     close_price_(std::nullopt),
-    spread_(spread),
-    financing_(financing),
-    commission_(commission),
-    take_profit_order_ptr_(std::move(std::move(std::move(take_profit_order_ptr)))),
-    stop_loss_order_ptr_(std::move(stop_loss_order_ptr)),
-    trailing_stop_loss_order_ptr_(std::move(trailing_stop_loss_order_ptr)) {}
+    take_profit_order_ptr_(take_profit_order_ptr),
+    stop_loss_order_ptr_(stop_loss_order_ptr),
+    trailing_stop_loss_order_ptr_(trailing_stop_loss_order_ptr) {}
 
 iridium::Trade::Trade(
     const std::string &instrument,
@@ -48,9 +42,6 @@ iridium::Trade::Trade(
     std::time_t open_time,
     int initial_units,
     double initial_margin,
-    double spread,
-    double financing,
-    double commission,
     std::optional<double> take_profit_price,
     std::optional<double> stop_loss_price,
     std::optional<double> trailing_stop_distance) :
@@ -65,9 +56,6 @@ iridium::Trade::Trade(
     realized_profit_loss_(0.00),
     close_time_(std::nullopt),
     close_price_(std::nullopt),
-    spread_(spread),
-    financing_(financing),
-    commission_(commission),
     take_profit_order_ptr_(
         take_profit_price.has_value()
         ? std::make_shared<iridium::TakeProfitOrder>(
@@ -97,7 +85,7 @@ const std::string &iridium::Trade::trade_id() const noexcept {
 }
 
 const std::shared_ptr<iridium::Instrument>
-&iridium::Trade::instrument() const noexcept {
+&iridium::Trade::instrument_ptr() const noexcept {
   return instrument_ptr_;
 }
 
@@ -136,18 +124,6 @@ double iridium::Trade::realized_profit_loss() const noexcept {
 const std::optional<std::time_t>
 &iridium::Trade::close_time() const noexcept {
   return close_time_;
-}
-
-double iridium::Trade::spread() const noexcept {
-  return spread_;
-}
-
-double iridium::Trade::financing() const noexcept {
-  return financing_;
-}
-
-double iridium::Trade::commission() const noexcept {
-  return commission_;
 }
 
 const std::shared_ptr<iridium::TakeProfitOrder>
@@ -212,30 +188,30 @@ void iridium::Trade::set_trailing_stop_distance(double distance) {
   this->trailing_stop_loss_order_ptr_->set_distance(distance);
 }
 
-void iridium::Trade::UpdateTakeProfitOrder(double price, std::time_t open_time) {
+void iridium::Trade::UpdateTakeProfitOrder(double price, std::time_t time) {
   if (this->take_profit_order_ptr_) {
     this->set_take_profit_price(price);
   } else {
-    auto order_ptr = std::make_shared<TakeProfitOrder>(price, open_time, trade_id_);
+    auto order_ptr = std::make_shared<TakeProfitOrder>(price, time, trade_id_);
     this->set_take_profit_order_ptr(order_ptr);
   }
 }
 
-void iridium::Trade::UpdateStopLossOrder(double price, std::time_t open_time) {
+void iridium::Trade::UpdateStopLossOrder(double price, std::time_t time) {
   if (this->stop_loss_order_ptr_) {
     this->set_stop_loss_price(price);
   } else {
-    auto order_ptr = std::make_shared<StopLossOrder>(price, open_time, trade_id_);
+    auto order_ptr = std::make_shared<StopLossOrder>(price, time, trade_id_);
     this->set_stop_loss_order_ptr(order_ptr);
   }
 }
-void iridium::Trade::UpdateTrailingStopLossOrder(double distance, std::time_t open_time) {
+void iridium::Trade::UpdateTrailingStopLossOrder(double distance, std::time_t time) {
   if (this->trailing_stop_loss_order_ptr_) {
     this->set_trailing_stop_distance(distance);
   } else {
     auto order_ptr = std::make_shared<TrailingStopLossOrder>(
         distance,
-        open_time,
+        time,
         trade_id_,
         price_,
         current_units_ < 0);
@@ -244,26 +220,21 @@ void iridium::Trade::UpdateTrailingStopLossOrder(double distance, std::time_t op
 }
 
 double iridium::Trade::PartiallyCloseTrade(
-    double rate,
-    double current_price,
+    double acc_quote_rate,
+    double trade_close_price,
     int units) {
-  auto trading_cost = iridium::CalculateGainsLosses(
-      this->spread_,
-      abs(units),
-      rate,
-      iridium::pip_point(*(this->instrument_ptr_))) + this->commission();
-  auto profit_loss = (current_price - this->price()) * (1 / rate) * units - trading_cost;
+  auto profit_loss = (trade_close_price - this->price()) * (1 / acc_quote_rate) * units;
   this->current_units_ -= units;
   this->realized_profit_loss_ += profit_loss;
   return profit_loss;
 }
 
 double iridium::Trade::CloseTrade(
-    double rate,
-    double current_price,
+    double acc_quote_rate,
+    double trade_close_price,
     std::time_t time) {
-  auto profit_loss = PartiallyCloseTrade(rate, current_price, this->current_units_);
-  this->close_price_ = current_price;
+  auto profit_loss = PartiallyCloseTrade(acc_quote_rate, trade_close_price, this->current_units_);
+  this->close_price_ = trade_close_price;
   this->close_time_ = time;
   if (auto order_ptr = this->take_profit_order_ptr_) {
     if (OrderState::kTriggered != order_ptr->order_state())
@@ -300,21 +271,16 @@ void iridium::Trade::set_trailing_stop_loss_order_ptr(
 
 double iridium::CalculateUnrealizedProfitLoss(
     const iridium::Trade &trade,
-    double rate,
+    double acc_quote_rate,
     double current_price) {
-  auto cost = iridium::CalculateGainsLosses(
-      trade.spread() / 2,
-      abs(trade.current_units()),
-      rate,
-      iridium::pip_point(*(trade.instrument()))) + trade.commission();
-  return (current_price - trade.price()) * (1 / rate) * trade.current_units() - cost;
+  return (current_price - trade.price()) * (1 / acc_quote_rate) * trade.current_units();
 }
 
 double iridium::CalculateMarginUsed(
     const iridium::Trade &trade,
-    double rate,
+    double acc_base_rate,
     int leverage) {
-  return CalculateMarginUsed(trade.current_units(), rate, leverage);
+  return CalculateMarginUsed(trade.current_units(), acc_base_rate, leverage);
 }
 
 std::string iridium::TradeStateToString(iridium::TradeState state) {
@@ -326,7 +292,7 @@ std::string iridium::TradeStateToString(iridium::TradeState state) {
 
 std::ostream &iridium::operator<<(std::ostream &os, const iridium::Trade &trade) {
   os << "id: " << trade.trade_id_
-     << " instrument: " << trade.instrument()->name()
+     << " instrument: " << trade.instrument_ptr()->name()
      << " price: " << trade.price_
      << " state: " << TradeStateToString(trade.state_)
      << " open time: " << TimeToLocalTimeString(trade.open_time_)
@@ -334,7 +300,6 @@ std::ostream &iridium::operator<<(std::ostream &os, const iridium::Trade &trade)
      << " initial margin: " << trade.initial_margin_
      << " current units: " << trade.current_units_
      << " realized profit loss: " << trade.realized_profit_loss_
-     << " spread: " << trade.spread_
      << " close time: "
      << (trade.close_time_.has_value()
          ? TimeToLocalTimeString(trade.close_time_.value()) : std::string())

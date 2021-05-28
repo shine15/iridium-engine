@@ -11,8 +11,8 @@ limitations under the License.
 ==============================================================================*/
 
 #include <memory>
-#include <iostream>
 #include <boost/filesystem.hpp>
+#include <spdlog/sinks/stdout_color_sinks.h>
 #include <iridium/calendar.hpp>
 #include "../strategy/include/simulate.hpp"
 #include <iridium/account.hpp>
@@ -29,11 +29,11 @@ int main() {
   auto hdf5_file_path = boost::filesystem::path(getenv("HOME"));
   hdf5_file_path += "/.iridium/data/history.h5";
   const auto kBeginYear = 2021;
-  const auto kBeginMonth = 4;
-  const auto kBeginDay = 26;
+  const auto kBeginMonth = 5;
+  const auto kBeginDay = 24;
   const auto kEndYear = 2021;
-  const auto kEndMonth = 4;
-  const auto kEndDay = 29;
+  const auto kEndMonth = 5;
+  const auto kEndDay = 25;
   const auto kRegion = "Australia/Sydney";
   const auto kHistFreq = "M15";
   const auto kTickFreq = "M1";
@@ -48,9 +48,10 @@ int main() {
   csv_file_path += "/.iridium/report.csv";
 
   // account
-  auto account_ptr = std::make_shared<SimulationAccount>(kAccountCurrency, kLeverage, kCapitalBase);
+  auto account_ptr = std::make_shared<SimulationAccount>(kAccountCurrency, kLeverage, kCapitalBase, kSpread);
 
   // data
+  /*
   auto instruments = instrument_list({
     "AUD_CAD", "AUD_JPY", "AUD_NZD", "AUD_SGD", "AUD_USD",
     "CAD_JPY", "CAD_SGD",
@@ -59,7 +60,8 @@ int main() {
     "NZD_CAD", "NZD_JPY", "NZD_SGD", "NZD_USD",
     "SGD_JPY",
     "USD_CAD", "USD_JPY", "USD_SGD"});
-//  auto instruments = instrument_list({"EUR_USD"});
+  */
+  auto instruments = instrument_list({"EUR_USD"});
   auto freqs = data_freq_list({kHistFreq, kTickFreq});
   auto hdf5data = std::make_unique<TradeData>(hdf5_file_path.string(), *instruments, *freqs);
 
@@ -94,20 +96,19 @@ int main() {
             continue;
           }
         }
-        ProcessTriggerOrders(account_ptr, tick, *data_map);
-        account_ptr->PrintAccountInfo(tick, *data_map);
+        account_ptr->ProcessOrders(tick, *data_map);
+        //iridium::logger()->info(account_ptr->summary(tick, *data_map));
       }
     } catch (const std::out_of_range& e) {
-      std::cout << e.what() << std::endl;
+      iridium::logger()->error(e.what());
       continue;
     }
   }
 
-  std::cout << *account_ptr << std::endl;
+  iridium::logger()->info(account_ptr->string());
 
   iridium::data::GenerateTransactionsReport(*account_ptr, csv_file_path.string());
 
   return 0;
 }
-
 

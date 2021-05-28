@@ -22,37 +22,11 @@ limitations under the License.
 #include <iridium/trade.hpp>
 #include <iridium/data.hpp>
 #include <iridium/forex.hpp>
+#include <iridium/logging.hpp>
 
 namespace iridium {
 class Account {
  public:
-  virtual void CreateMarketOrder(
-      std::time_t create_time,
-      double margin_available,
-      const std::string &instrument,
-      int units,
-      double market_price,
-      double account_quote_rate,
-      double account_base_rate,
-      double spread,
-      std::optional<double> take_profit_price = std::nullopt,
-      std::optional<double> stop_loss_price = std::nullopt,
-      std::optional<double> trailing_stop_loss_distance = std::nullopt,
-      double financing = 0.0,
-      double commission = 0.0) = 0;
-
-  /*
-   * @param instrument
-   * @param rate: account currency vs quote currency rate
-   * @param current_price
-   * @param time
-  */
-  virtual void CloserPosition(
-      const std::string &instrument,
-      double rate,
-      double current_price,
-      std::time_t time) = 0;
-
   [[nodiscard]]
   virtual double balance() const = 0;
 
@@ -62,7 +36,16 @@ class Account {
   [[nodiscard]]
   virtual int leverage() const = 0;
 
-  virtual int position_size(const std::string &instrument) const = 0;
+  [[nodiscard]]
+  virtual std::shared_ptr<TradeList>
+  open_trades_ptr(const std::string &instrument) const = 0;
+
+  [[nodiscard]]
+  virtual std::shared_ptr<LimitOrderList>
+  pending_limit_orders_ptr(const std::string &instrument) const = 0;
+
+  [[nodiscard]]
+  virtual int open_position_size(const std::string &instrument) const = 0;
 
   [[nodiscard]]
   virtual std::optional<double>
@@ -72,53 +55,45 @@ class Account {
   virtual std::optional<double>
   margin_used(const data::TickDataMap &tick_data_map) const = 0;
 
+  virtual void CreateLimitOrder(
+      std::time_t create_time,
+      const std::string &instrument,
+      int units,
+      double price,
+      std::optional<double> take_profit_price = std::nullopt,
+      std::optional<double> stop_loss_price = std::nullopt,
+      std::optional<double> trailing_stop_loss_distance = std::nullopt) = 0;
+
+  virtual void CloserPosition(
+      const std::string &instrument,
+      double acc_quote_rate,
+      double current_price,
+      std::time_t time) = 0;
+
+  virtual void UpdateTradeStopLossPrice(
+      const std::shared_ptr<Trade> &trade_ptr,
+      double stop_loss_price,
+      std::time_t time) = 0;
+
+  virtual void UpdateTradeTakeProfitPrice(
+      const std::shared_ptr<Trade> &trade_ptr,
+      double take_profit_price,
+      std::time_t time) = 0;
+
+  virtual void UpdateTrailingStopDistance(
+      const std::shared_ptr<Trade> &trade_ptr,
+      double distance,
+      std::time_t time) = 0;
+
+  virtual void CancelLimitOrder(const std::shared_ptr<LimitOrder> &order_ptr) = 0;
+
   virtual bool HasOpenTrades(const std::string &instrument) const = 0;
 
-  virtual void PrintAccountInfo(
-      std::time_t tick,
-      const iridium::data::TickDataMap &data_map) const = 0;
+  virtual bool HasPendingOrders(const std::string &instrument) const = 0;
 };
 
 class SimulationAccount: public Account {
  public:
-  SimulationAccount(
-      const std::string &account_currency,
-      int leverage,
-      double capital_base);
-
-  void CreateMarketOrder(
-      std::time_t create_time,
-      double margin_available,
-      const std::string &instrument,
-      int units,
-      double market_price,
-      double account_quote_rate,
-      double account_base_rate,
-      double spread,
-      std::optional<double> take_profit_price = std::nullopt,
-      std::optional<double> stop_loss_price = std::nullopt,
-      std::optional<double> trailing_stop_loss_distance = std::nullopt,
-      double financing = 0.0,
-      double commission = 0.0) override;
-
-  void PartiallyCloseTrade(
-      const std::shared_ptr<Trade> &trade_ptr,
-      double rate,
-      double current_price,
-      int units);
-
-  void CloseTrade(
-      const std::shared_ptr<Trade> &trade_ptr,
-      double rate,
-      double current_price,
-      std::time_t time);
-
-  void CloserPosition(
-      const std::string &instrument,
-      double rate,
-      double current_price,
-      std::time_t time) override;
-
   [[nodiscard]]
   double balance() const override;
 
@@ -130,18 +105,14 @@ class SimulationAccount: public Account {
 
   [[nodiscard]]
   std::shared_ptr<TradeList>
-  open_trades_ptr(const std::string &instrument) const;
+  open_trades_ptr(const std::string &instrument) const override;
 
   [[nodiscard]]
-  std::shared_ptr<TradeList>
-  open_trades_ptr() const;
+  std::shared_ptr<LimitOrderList>
+  pending_limit_orders_ptr(const std::string &instrument) const override;
 
   [[nodiscard]]
-  const std::shared_ptr<TradeList> &all_trades_ptr() const;
-
-  void UpdateBalance(double profit_loss);
-
-  int position_size(const std::string &instrument) const override;
+  int open_position_size(const std::string &instrument) const override;
 
   [[nodiscard]]
   std::optional<double>
@@ -151,11 +122,62 @@ class SimulationAccount: public Account {
   std::optional<double>
   margin_used(const data::TickDataMap &tick_data_map) const override;
 
+  void CreateLimitOrder(
+      std::time_t create_time,
+      const std::string &instrument,
+      int units,
+      double price,
+      std::optional<double> take_profit_price = std::nullopt,
+      std::optional<double> stop_loss_price = std::nullopt,
+      std::optional<double> trailing_stop_loss_distance = std::nullopt) override;
+
+  void CloserPosition(
+      const std::string &instrument,
+      double acc_quote_rate,
+      double current_price,
+      std::time_t time) override;
+
+  void UpdateTradeStopLossPrice(
+      const std::shared_ptr<Trade> &trade_ptr,
+      double stop_loss_price,
+      std::time_t time
+  ) override;
+
+  void UpdateTradeTakeProfitPrice(
+      const std::shared_ptr<Trade> &trade_ptr,
+      double take_profit_price,
+      std::time_t time
+  ) override ;
+
+  void UpdateTrailingStopDistance(
+      const std::shared_ptr<Trade> &trade_ptr,
+      double distance,
+      std::time_t time
+  ) override;
+
+  void CancelLimitOrder(const std::shared_ptr<LimitOrder> &order_ptr) override;
+
   bool HasOpenTrades(const std::string &instrument) const override;
 
-  void PrintAccountInfo(
-      std::time_t tick,
-      const iridium::data::TickDataMap &data_map) const override;
+  bool HasPendingOrders(const std::string &instrument) const override;
+
+  SimulationAccount(
+      const std::string &account_currency,
+      int leverage,
+      double capital_base,
+      double spread);
+
+  [[nodiscard]]
+  std::shared_ptr<TradeList> trades_ptr() const;
+
+  std::string string();
+
+  std::string summary(std::time_t tick,
+                      const iridium::data::TickDataMap &data_map) const;
+
+  void ProcessOrders(
+      std::time_t time,
+      const data::TickDataMap &tick_data_map);
 
   friend std::ostream &operator<<(std::ostream &os, const SimulationAccount &account);
 
@@ -164,38 +186,73 @@ class SimulationAccount: public Account {
   int leverage_;
   double capital_base_;
   double balance_;
+  double spread_;
   std::shared_ptr<TradeList> trades_ptr_;
+  std::shared_ptr<OrderList> orders_ptr_;
+  std::shared_ptr<spdlog::logger> logger_;
+
+  [[nodiscard]]
+  std::shared_ptr<TradeList>
+  open_trades_ptr() const;
+
+  [[nodiscard]]
+  std::shared_ptr<OrderList>
+  pending_orders_ptr() const;
+
+  [[nodiscard]]
+  std::shared_ptr<Trade>
+  acc_trade_ptr(const TriggerOrder &order) const;
+
+  /*
+   * return instrument name, ask low, ask high, bid low, bid high, account vs quote, account vs base, current price
+  */
+  std::optional<std::tuple<std::string, double, double, double, double, double, double, double>>
+  instrument_market_info(const Instrument &instrument, const data::TickDataMap &tick_data_map);
+
+  void PartiallyCloseTrade(
+      const std::shared_ptr<Trade> &trade_ptr,
+      double acc_quote_rate,
+      double current_price,
+      int units);
+
+  void CloseTrade(
+      const std::shared_ptr<Trade> &trade_ptr,
+      double acc_quote_rate,
+      double current_price,
+      std::time_t time);
+
+  void ProcessLimitOrder(
+      const std::shared_ptr<LimitOrder> &order_ptr,
+      std::time_t time,
+      const data::TickDataMap &tick_data_map);
+
+  void ProcessTriggerOrder(
+      const std::shared_ptr<TriggerOrder> &order_ptr,
+      std::time_t time,
+      const data::TickDataMap &tick_data_map);
+
+  void ProcessPriceTriggerOrder(
+      const std::shared_ptr<PriceTriggerOrder> &order_ptr,
+      const std::shared_ptr<Trade> &trade_ptr,
+      double ask_low,
+      double ask_high,
+      double bid_low,
+      double bid_high,
+      double acc_quote_rate,
+      std::time_t time);
+
+  void ProcessTrailingStopLossOrder(
+      const std::shared_ptr<TrailingStopLossOrder> &order_ptr,
+      const std::shared_ptr<Trade> &trade_ptr,
+      double ask_low,
+      double ask_high,
+      double bid_low,
+      double bid_high,
+      double acc_quote_rate,
+      double current_price,
+      std::time_t time);
 };
 
-void ProcessTriggerOrders(
-    const std::shared_ptr<SimulationAccount> &account_ptr,
-    std::time_t time,
-    const data::TickDataMap &tick_data_map);
-
-void
-ProcessStopLossOrder(
-    const std::shared_ptr<StopLossOrder> &order_ptr,
-    const std::shared_ptr<SimulationAccount> &account_ptr,
-    const std::shared_ptr<Trade> &trade_ptr,
-    std::time_t time,
-    double rate,
-    const data::Candlestick &current_data);
-
-void ProcessTakeProfitOrder(
-    const std::shared_ptr<TakeProfitOrder> &order_ptr,
-    const std::shared_ptr<SimulationAccount> &account_ptr,
-    const std::shared_ptr<Trade> &trade_ptr,
-    std::time_t time,
-    double rate,
-    const data::Candlestick &current_data);
-
-void ProcessTrailingStopLossOrder(
-    const std::shared_ptr<TrailingStopLossOrder> &order_ptr,
-    const std::shared_ptr<SimulationAccount> &account_ptr,
-    const std::shared_ptr<Trade> &trade_ptr,
-    std::time_t time,
-    double rate,
-    const data::Candlestick &current_data);
 }  // namespace iridium
 
 #endif  // INCLUDE_IRIDIUM_ACCOUNT_HPP_

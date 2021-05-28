@@ -100,30 +100,27 @@ void iridium::Order::set_order_state(iridium::OrderState orderState) {
   this->order_state_ = orderState;
 }
 
-iridium::MarketOrderRequest::MarketOrderRequest(
+iridium::LimitOrder::LimitOrder(
     std::time_t create_time,
     const std::string &instrument,
     int units,
-    double market_price,
+    double price,
     std::shared_ptr<TakeProfitDetails> take_profit_details,
     std::shared_ptr<StopLossDetails> stop_loss_details,
     std::shared_ptr<TrailingStopLossDetails> trailing_stop_loss_details,
-    double price_bound,
     iridium::OrderPositionFill order_position_fill,
     iridium::TimeInForce timeInForce) :
-    request_id_(boost::uuids::to_string(boost::uuids::random_generator()())),
-    create_time_(create_time),
+    Order(create_time),
     instrument_ptr_(std::make_shared<iridium::Instrument>(instrument)),
     units_(units),
-    market_price_(market_price),
+    price_(price),
     take_profit_details_ptr_(std::move(take_profit_details)),
     stop_loss_details_ptr_(std::move(stop_loss_details)),
     trailing_stop_loss_details_ptr_(std::move(trailing_stop_loss_details)),
-    price_bound_(price_bound),
     order_position_fill_(order_position_fill),
     time_in_force_(timeInForce) {}
 
-iridium::MarketOrderRequest::MarketOrderRequest(
+iridium::LimitOrder::LimitOrder(
     std::time_t create_time,
     const std::string &instrument,
     int units,
@@ -131,11 +128,10 @@ iridium::MarketOrderRequest::MarketOrderRequest(
     std::optional<double> take_profit_price,
     std::optional<double> stop_loss_price,
     std::optional<double> trailing_stop_loss_distance) :
-    request_id_(boost::uuids::to_string(boost::uuids::random_generator()())),
-    create_time_(create_time),
+    Order(create_time),
     instrument_ptr_(std::make_shared<iridium::Instrument>(instrument)),
     units_(units),
-    market_price_(market_price),
+    price_(market_price),
     take_profit_details_ptr_(
         take_profit_price.has_value()
         ? std::make_shared<iridium::TakeProfitDetails>(take_profit_price.value())
@@ -149,50 +145,66 @@ iridium::MarketOrderRequest::MarketOrderRequest(
         ? std::make_shared<iridium::TrailingStopLossDetails>(
             trailing_stop_loss_distance.value())
         : std::shared_ptr<iridium::TrailingStopLossDetails>(nullptr)),
-    price_bound_(0.0),
     order_position_fill_(iridium::OrderPositionFill::kReduceFirst),
     time_in_force_(iridium::TimeInForce::kGTC) {}
 
-int iridium::MarketOrderRequest::units() const noexcept {
+int iridium::LimitOrder::units() const noexcept {
   return units_;
 }
 
-double iridium::MarketOrderRequest::market_price() const noexcept {
-  return market_price_;
-}
-
-double iridium::MarketOrderRequest::price_bound() const noexcept {
-  return price_bound_;
+double iridium::LimitOrder::price() const noexcept {
+  return price_;
 }
 
 iridium::OrderPositionFill
-iridium::MarketOrderRequest::order_position_fill() const noexcept {
+iridium::LimitOrder::order_position_fill() const noexcept {
   return order_position_fill_;
 }
 
 iridium::TimeInForce
-iridium::MarketOrderRequest::time_in_force() const noexcept {
+iridium::LimitOrder::time_in_force() const noexcept {
   return time_in_force_;
 }
 
 const std::shared_ptr<iridium::Instrument>
-&iridium::MarketOrderRequest::instrument_ptr() const noexcept {
+&iridium::LimitOrder::instrument_ptr() const noexcept {
   return instrument_ptr_;
 }
 
 const std::shared_ptr<iridium::TakeProfitDetails>
-&iridium::MarketOrderRequest::take_profit_details_ptr() const noexcept {
+&iridium::LimitOrder::take_profit_details_ptr() const noexcept {
   return take_profit_details_ptr_;
 }
 
 const std::shared_ptr<iridium::StopLossDetails>
-&iridium::MarketOrderRequest::stop_loss_details_ptr() const noexcept {
+&iridium::LimitOrder::stop_loss_details_ptr() const noexcept {
   return stop_loss_details_ptr_;
 }
 
 const std::shared_ptr<iridium::TrailingStopLossDetails> &
-iridium::MarketOrderRequest::trailing_stop_loss_details_ptr() const noexcept {
+iridium::LimitOrder::trailing_stop_loss_details_ptr() const noexcept {
   return trailing_stop_loss_details_ptr_;
+}
+
+std::optional<double> iridium::LimitOrder::take_profit_price() const noexcept {
+  if (take_profit_details_ptr_) {
+    return take_profit_details_ptr_->price();
+  }
+  return std::nullopt;
+}
+
+std::optional<double> iridium::LimitOrder::stop_loss_price() const noexcept {
+  if (stop_loss_details_ptr_) {
+    return stop_loss_details_ptr_->price();
+  }
+  return std::nullopt;
+}
+
+std::optional<double> iridium::LimitOrder::trailing_stop_loss_distance() const noexcept {
+  if (trailing_stop_loss_details_ptr_) {
+    return trailing_stop_loss_details_ptr_->distance();
+  }
+  return std::nullopt;
 }
 
 iridium::TriggerOrder::TriggerOrder(
@@ -294,15 +306,15 @@ std::string iridium::OrderStateToString(iridium::OrderState state) {
   }
 }
 
-std::ostream &iridium::operator<<(std::ostream &os, const iridium::MarketOrderRequest &request) {
-  os << "id: " << request.request_id_
-     << " create time: " << TimeToLocalTimeString(request.create_time_)
-     << " instrument: " << request.instrument_ptr_->name()
-     << " units: " << request.units_
-     << " price: " << request.market_price_
-     << " stop loss: " << request.stop_loss_details_ptr_->price()
-     << " take profit: " << request.take_profit_details_ptr_->price()
-     << " trailing stop: " << request.trailing_stop_loss_details_ptr_->distance();
+std::ostream &iridium::operator<<(std::ostream &os, const iridium::LimitOrder &order) {
+  os << "id: " << order.order_id()
+     << " create time: " << TimeToLocalTimeString(order.create_time())
+     << " instrument: " << order.instrument_ptr_->name()
+     << " units: " << order.units_
+     << " price: " << order.price_
+     << " stop loss: " << order.stop_loss_details_ptr_->price()
+     << " take profit: " << order.take_profit_details_ptr_->price()
+     << " trailing stop: " << order.trailing_stop_loss_details_ptr_->distance();
   return os;
 }
 

@@ -20,31 +20,31 @@ namespace iridium {
     /*
      * https://www.fxpro.com/trading-tools/calculators/pip
      * @param units
-     * @param rate: account currency vs quote currency rate
+     * @param acc_quote_rate: account currency vs quote currency rate
      * @param decimals: pip decimals
      */
-    double CalculatePipValue(int units, double rate, int decimals);
+    double CalculatePipValue(int units, double acc_quote_rate, int decimals);
 
     /*
      * https://www.oanda.com/forex-trading/analysis/profit-calculator/
      * @param change: Pip change
      * @param units
-     * @param rate: Account currency vs quote currency rate
+     * @param acc_quote_rate: Account currency vs quote currency rate
      * @param decimals: pip decimals
      */
     double CalculateGainsLosses(
         double change,
         int units,
-        double rate,
+        double acc_quote_rate,
         int decimals);
 
     /*
      *  https://www.oanda.com/resources/legal/united-states/legal/margin-rules
      *  @param units
-     *  @param rate: account currency vs base currency rate
+     *  @param acc_base_rate: account currency vs base currency rate
      *  @param leverage
      */
-    double CalculateMarginUsed(int units, double rate, int leverage);
+    double CalculateMarginUsed(int units, double acc_base_rate, int leverage);
 
     /*
      * @param nav: net asset value
@@ -68,22 +68,22 @@ namespace iridium {
      * @param equity
      * @param risk_pct: risk percentage
      * @param stop_loss_pips
-     * @param rate: Account currency vs quote currency rate
+     * @param acc_quote_rate: Account currency vs quote currency rate
      * @param pip_num: pip number
      */
     int CalculatePositionSize(
         double equity,
         double risk_pct,
         int stop_loss_pips,
-        double rate,
+        double acc_quote_rate,
         int pip_num);
 
     /*
      * @param size
      * @param current_price
-     * @param rate: Account currency vs quote currency rate
+     * @param acc_quote_rate: Account currency vs quote currency rate
      */
-    double CalculatePositionValue(int size, double current_price, double rate);
+    double CalculatePositionValue(int size, double current_price, double acc_quote_rate);
 
 }  // namespace iridium
 
