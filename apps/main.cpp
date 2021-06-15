@@ -12,7 +12,6 @@ limitations under the License.
 
 #include <memory>
 #include <boost/filesystem.hpp>
-#include <spdlog/sinks/stdout_color_sinks.h>
 #include <iridium/calendar.hpp>
 #include "../strategy/include/simulate.hpp"
 #include <iridium/account.hpp>
@@ -30,13 +29,17 @@ int main() {
   hdf5_file_path += "/.iridium/data/history.h5";
   const auto kBeginYear = 2021;
   const auto kBeginMonth = 5;
-  const auto kBeginDay = 24;
+  const auto kBeginDay = 1;
   const auto kEndYear = 2021;
-  const auto kEndMonth = 5;
-  const auto kEndDay = 25;
+  const auto kEndMonth = 6;
+  const auto kEndDay = 7;
   const auto kRegion = "Australia/Sydney";
-  const auto kHistFreq = "M15";
-  const auto kTickFreq = "M1";
+
+  // triple screen trading system settings
+  const auto kShortTermTimeFrame = "M15";
+  const auto kIntermediateTermTimeFrame = "H1";
+  const auto kLongTermTimeFrame = "H4";
+  const auto kSimulateTickTimeFrame = "M1";
   const auto kHistDataCount = 90;
 
   const auto kAccountCurrency = "USD";
@@ -51,18 +54,16 @@ int main() {
   auto account_ptr = std::make_shared<SimulationAccount>(kAccountCurrency, kLeverage, kCapitalBase, kSpread);
 
   // data
-  /*
-  auto instruments = instrument_list({
-    "AUD_CAD", "AUD_JPY", "AUD_NZD", "AUD_SGD", "AUD_USD",
-    "CAD_JPY", "CAD_SGD",
-    "EUR_AUD", "EUR_CAD", "EUR_GBP", "EUR_JPY", "EUR_NZD", "EUR_SGD", "EUR_USD",
-    "GBP_AUD", "GBP_CAD", "GBP_JPY", "GBP_NZD", "GBP_SGD", "GBP_USD",
-    "NZD_CAD", "NZD_JPY", "NZD_SGD", "NZD_USD",
-    "SGD_JPY",
-    "USD_CAD", "USD_JPY", "USD_SGD"});
-  */
+//  auto instruments = instrument_list({
+//    "AUD_CAD", "AUD_JPY", "AUD_NZD", "AUD_SGD", "AUD_USD",
+//    "CAD_JPY", "CAD_SGD",
+//    "EUR_AUD", "EUR_CAD", "EUR_GBP", "EUR_JPY", "EUR_NZD", "EUR_SGD", "EUR_USD",
+//    "GBP_AUD", "GBP_CAD", "GBP_JPY", "GBP_NZD", "GBP_SGD", "GBP_USD",
+//    "NZD_CAD", "NZD_JPY", "NZD_SGD", "NZD_USD",
+//    "SGD_JPY",
+//    "USD_CAD", "USD_JPY", "USD_SGD"});
   auto instruments = instrument_list({"EUR_USD"});
-  auto freqs = data_freq_list({kHistFreq, kTickFreq});
+  auto freqs = data_freq_list({kShortTermTimeFrame, kIntermediateTermTimeFrame, kLongTermTimeFrame, kSimulateTickTimeFrame});
   auto hdf5data = std::make_unique<TradeData>(hdf5_file_path.string(), *instruments, *freqs);
 
   // clock
@@ -74,30 +75,49 @@ int main() {
       kEndMonth,
       kEndDay,
       kRegion,
-      StringToDataFreq(kHistFreq));
+      StringToDataFreq(kLongTermTimeFrame));
   for (auto it = clock.begin(); it != clock.end(); ++it) {
     try {
-      auto hist_data_map = hdf5data->history_data(
-          *instruments, *it, kHistDataCount, StringToDataFreq(kHistFreq));
-      for (int j = 0; j < StringToDataFreq(kHistFreq) / StringToDataFreq(kTickFreq); ++j) {
-        auto tick = *it + j * StringToDataFreq(kTickFreq);
-        auto data_map = hdf5data->candlestick_data(*instruments, tick, StringToDataFreq(kTickFreq));
-        for (auto const &[name, data] : *data_map) {
-          if (data) {
-            SimulateTrade(
-                name,
-                tick,
-                *hist_data_map->at(name),
-                *data_map,
-                kHistDataCount,
-                account_ptr,
-                kSpread);
-          } else {
-            continue;
+      // long term history data
+      auto long_hist_data_map = hdf5data->history_data(
+          *instruments, *it, kHistDataCount, StringToDataFreq(kLongTermTimeFrame));
+      for (int i = 0; i < StringToDataFreq(kLongTermTimeFrame) / StringToDataFreq(kIntermediateTermTimeFrame); ++i) {
+        // intermediate term history data
+        auto intermediate_tick = *it + i * StringToDataFreq(kIntermediateTermTimeFrame);
+        auto intermediate_hist_data_map = hdf5data->history_data(
+            *instruments, intermediate_tick, kHistDataCount, StringToDataFreq(kIntermediateTermTimeFrame));
+        for (int j = 0; j < StringToDataFreq(kIntermediateTermTimeFrame) / StringToDataFreq(kShortTermTimeFrame); ++j) {
+          // short term history data
+          auto short_tick = intermediate_tick + j * StringToDataFreq(kShortTermTimeFrame);
+          auto short_hist_data_map = hdf5data->history_data(
+              *instruments, short_tick, kHistDataCount, StringToDataFreq(kShortTermTimeFrame));
+          for (int k = 0; k < StringToDataFreq(kShortTermTimeFrame) / StringToDataFreq(kSimulateTickTimeFrame); ++k) {
+            // simulate term data
+            auto simulate_tick = short_tick + k * StringToDataFreq(kSimulateTickTimeFrame);
+            auto simulate_data_map = hdf5data->candlestick_data(*instruments, simulate_tick, StringToDataFreq(kSimulateTickTimeFrame));
+            for (auto const &[name, data] : *simulate_data_map) {
+              if (data) {
+                // instrument history data
+                auto long_term_hist_data_ptr = long_hist_data_map->at(name);
+                auto intermediate_term_hist_data_ptr = intermediate_hist_data_map->at(name);
+                auto short_term_hist_data_ptr = short_hist_data_map->at(name);
+                SimulateTrade(
+                    name,
+                    simulate_tick,
+                    *long_term_hist_data_ptr,
+                    *intermediate_term_hist_data_ptr,
+                    *short_term_hist_data_ptr,
+                    *simulate_data_map,
+                    account_ptr,
+                    kSpread);
+              } else {
+                continue;
+              }
+            }
+            account_ptr->ProcessOrders(simulate_tick, *simulate_data_map);
+            iridium::logger()->info(account_ptr->summary(simulate_tick, *simulate_data_map));
           }
         }
-        account_ptr->ProcessOrders(tick, *data_map);
-        //iridium::logger()->info(account_ptr->summary(tick, *data_map));
       }
     } catch (const std::out_of_range& e) {
       iridium::logger()->error(e.what());

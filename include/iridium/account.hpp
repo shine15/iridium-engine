@@ -64,6 +64,16 @@ class Account {
       std::optional<double> stop_loss_price = std::nullopt,
       std::optional<double> trailing_stop_loss_distance = std::nullopt) = 0;
 
+
+  virtual void CreateMarketOrder(
+      std::time_t create_time,
+      const std::string &instrument,
+      int units,
+      double price,
+      std::optional<double> take_profit_price = std::nullopt,
+      std::optional<double> stop_loss_price = std::nullopt,
+      std::optional<double> trailing_stop_loss_distance = std::nullopt) = 0;
+
   virtual void CloserPosition(
       const std::string &instrument,
       double acc_quote_rate,
@@ -123,6 +133,15 @@ class SimulationAccount: public Account {
   margin_used(const data::TickDataMap &tick_data_map) const override;
 
   void CreateLimitOrder(
+      std::time_t create_time,
+      const std::string &instrument,
+      int units,
+      double price,
+      std::optional<double> take_profit_price = std::nullopt,
+      std::optional<double> stop_loss_price = std::nullopt,
+      std::optional<double> trailing_stop_loss_distance = std::nullopt) override;
+
+  void CreateMarketOrder(
       std::time_t create_time,
       const std::string &instrument,
       int units,

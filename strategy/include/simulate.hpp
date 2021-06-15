@@ -27,32 +27,16 @@ limitations under the License.
 #include <iridium/logging.hpp>
 #include <algorithm>
 #include "position.hpp"
+#include "indicator.hpp"
 
 void SimulateTrade(
     const std::string &instrument_name,
     std::time_t tick,
-    const iridium::data::DataList &hist_data,
+    const iridium::data::DataList &long_term_hist_data,
+    const iridium::data::DataList &intermediate_term_hist_data,
+    const iridium::data::DataList &short_term_hist_data,
     const iridium::data::TickDataMap &tick_data_map,
-    int hist_data_count,
     const std::shared_ptr<iridium::Account> &account_ptr,
     double spread);
-
-void ClosePosition(
-    const std::string &instrument,
-    const std::shared_ptr<iridium::Account> &account_ptr,
-    double acc_quote_rate,
-    double current_price,
-    std::time_t time);
-
-int CalculateLimitOrderUnits(
-    const std::shared_ptr<iridium::Account> &account_ptr,
-    const iridium::data::TickDataMap &tick_data_map,
-    double order_price,
-    double stop_loss_price,
-    double acc_quote_rate,
-    double risk_pct,
-    int pip_num,
-    bool is_short,
-    int min_size);
 
 #endif  // APPS_SIMULATE_HPP_

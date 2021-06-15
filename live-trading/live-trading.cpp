@@ -111,7 +111,6 @@ class IridiumLive: public Application {
               std::time(nullptr),
               *hist_data_map->at(name),
               *tick_data_map,
-              kHistDataCount,
               client,
               spreads->at(name));
         }

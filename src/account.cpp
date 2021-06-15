@@ -128,6 +128,28 @@ void iridium::SimulationAccount::CreateLimitOrder(
   orders_ptr_->push_back(order);
 }
 
+void iridium::SimulationAccount::CreateMarketOrder(
+    std::time_t create_time,
+    const std::string &instrument,
+    int units,
+    double price,
+    std::optional<double> take_profit_price,
+    std::optional<double> stop_loss_price,
+    std::optional<double> trailing_stop_loss_distance) {
+  auto spread_value = this->spread_ * pow(10, -pip_point(Instrument(instrument)));
+  auto ask = price + spread_value / 2.0;
+  auto bid = price - spread_value / 2.0;
+  auto order_price = units > 0 ? ask : bid;
+  CreateLimitOrder(
+      create_time,
+      instrument,
+      units,
+      order_price,
+      take_profit_price,
+      stop_loss_price,
+      trailing_stop_loss_distance);
+}
+
 void iridium::SimulationAccount::CloserPosition(
     const std::string &instrument,
     double acc_quote_rate,
