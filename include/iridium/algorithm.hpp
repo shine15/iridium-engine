@@ -47,34 +47,52 @@ int BinarySearch(
 }
 
 template<typename T>
-std::optional<T> FindNearestPeakHigh(const std::vector<T> &v, int peak_half_size) {
+std::vector<std::tuple<T, int>> PeakHighs(const std::vector<T> &v, int peak_half_size) {
   if (v.size() < 2 * peak_half_size + 1) {
     throw std::out_of_range("Out of range");
   }
+  std::vector<std::tuple<T, int>> highs;
   for (int i = v.size() - peak_half_size - 1; i >= peak_half_size; --i) {
     auto sub_list = std::vector<T>(v.begin() + i - peak_half_size, v.begin() + i + peak_half_size + 1);
     auto max_value = std::max_element(sub_list.begin(), sub_list.end());
     auto mid_value = sub_list.at(peak_half_size);
     if (mid_value == *max_value) {
-      return mid_value;
+      highs.push_back(std::make_tuple(mid_value, i));
     }
   }
+  std::reverse(highs.begin(), highs.end());
+  return highs;
+}
+
+template<typename T>
+std::optional<T> FindNearestPeakHigh(const std::vector<T> &v, int peak_half_size) {
+  auto peak_highs = PeakHighs(v, peak_half_size);
+  if (!peak_highs.empty()) return std::get<0>(peak_highs.back());
   return std::nullopt;
 }
 
 template<typename T>
-std::optional<T> FindNearestPeakLow(const std::vector<T> &v, int peak_half_size) {
+std::vector<std::tuple<T, int>> PeakLows(const std::vector<T> &v, int peak_half_size) {
   if (v.size() < 2 * peak_half_size + 1) {
     throw std::out_of_range("Out of range");
   }
+  std::vector<std::tuple<T, int>> lows;
   for (int i = v.size() - peak_half_size - 1; i >= peak_half_size; --i) {
     auto sub_list = std::vector<T>(v.begin() + i - peak_half_size, v.begin() + i + peak_half_size + 1);
     auto min_value = std::min_element(sub_list.begin(), sub_list.end());
     auto mid_value = sub_list.at(peak_half_size);
     if (mid_value == *min_value) {
-      return mid_value;
+      lows.push_back(std::make_tuple(mid_value, i));
     }
   }
+  std::reverse(lows.begin(), lows.end());
+  return lows;
+}
+
+template<typename T>
+std::optional<T> FindNearestPeakLow(const std::vector<T> &v, int peak_half_size) {
+  auto peak_lows = PeakLows(v, peak_half_size);
+  if (!peak_lows.empty()) return std::get<0>(peak_lows.back());
   return std::nullopt;
 }
 

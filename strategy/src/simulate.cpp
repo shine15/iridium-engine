@@ -108,7 +108,7 @@ void SimulateTrade(
   const auto kMACDCrossOverCheck = 4;
 
   // Peak half size
-  const auto kPeakHalfSize = 3;
+  const auto kPeakHalfSize = 6;
 
   // ATR
   const auto kATRPeriod = 14;
@@ -158,134 +158,13 @@ void SimulateTrade(
   // moving average
   auto ema = iridium::indicator::ema(*closes, kFastPeriod);
 
-  // macd
-  auto[macd, macd_signal, macd_hist] = iridium::indicator::macd(*closes,
-                                                                kMACDFastPeriod,
-                                                                kMACDSlowPeriod,
-                                                                kMACDSignalPeriod);
-  auto count = macd_hist->size();
-  auto sliced_macd_hist = std::vector<double>(macd_hist->end() - kMACDCrossOverCheck, macd_hist->end());
-
-  //  take position
-  if (!account_ptr->HasPendingOrders(instrument_name) && !account_ptr->HasOpenTrades(instrument_name)) {
-    if (std::all_of(
-        std::begin(sliced_macd_hist),
-        std::end(sliced_macd_hist),
-        [](auto v) {
-          return v > 0;
-        })) {
-      if (macd_hist->at(count - 1 - kMACDCrossOverCheck) < 0 &&
-          macd->at(count - 1 - kMACDCrossOverCheck) < 0 &&
-          macd_signal->at(count - 1 - kMACDCrossOverCheck) < 0 &&
-          ema->back() > ema->at(count - 2) &&
-          current_price >= ema->back()) {
-        for (int i = 0; i < kRSICheck; ++i) {
-          if (rsi->at(count - 1 - kMACDCrossOverCheck - i) <= kRSILowerLimit) {
-            logger->info("confirmed macd up cross over: {}", local_time);
-            auto stop_loss_price = ema->back() - kATRChannel * atr->back();
-            auto order_price = current_price;
-            auto take_profit_price = order_price + kProfitLossRatio * (order_price - stop_loss_price);
-            auto units = CalculateMarketOrderUnits(
-                account_ptr,
-                tick_data_map,
-                order_price,
-                stop_loss_price,
-                acc_quote_rate,
-                kRiskPct,
-                pip_num,
-                false,
-                kMinTradeSize,
-                spread);
-            if (0 != units && spread <= kMaxSpread) {
-              account_ptr->CreateMarketOrder(
-                  tick,
-                  instrument_name,
-                  units,
-                  order_price,
-                  take_profit_price,
-                  stop_loss_price);
-              logger->info(
-                  "create market order - instrument: {}, time: {}, units: {}, order price: {}, take profit price: {}, stop loss price: {}",
-                  instrument_name,
-                  local_time,
-                  units,
-                  order_price,
-                  take_profit_price,
-                  stop_loss_price);
-            }
-
-            break;
-          }
-        }
-      }
-    }
-
-    if (std::all_of(
-        std::begin(sliced_macd_hist),
-        std::end(sliced_macd_hist),
-        [](auto v) {
-          return v < 0;
-        })) {
-      if (macd_hist->at(count - 1 - kMACDCrossOverCheck) > 0 &&
-          macd->at(count - 1 - kMACDCrossOverCheck) > 0 &&
-          macd_signal->at(count - 1 - kMACDCrossOverCheck) > 0 &&
-          ema->back() < ema->at(count - 2) &&
-          current_price <= ema->back()) {
-        for (int i = 0; i < kRSICheck; ++i) {
-          if (rsi->at(count - 1 - kMACDCrossOverCheck - i) >= kRSIUpperLimit) {
-            logger->info("confirmed macd down cross over: {}", local_time);
-
-            auto stop_loss_price = ema->back() + kATRChannel * atr->back();
-            auto order_price = current_price;
-            auto take_profit_price = order_price - kProfitLossRatio * (stop_loss_price - order_price);
-            auto units = CalculateMarketOrderUnits(
-                account_ptr,
-                tick_data_map,
-                order_price,
-                stop_loss_price,
-                acc_quote_rate,
-                kRiskPct,
-                pip_num,
-                true,
-                kMinTradeSize,
-                spread);
-            if (0 != units && spread <= kMaxSpread) {
-              account_ptr->CreateMarketOrder(
-                  tick,
-                  instrument_name,
-                  units,
-                  order_price,
-                  take_profit_price,
-                  stop_loss_price);
-              logger->info(
-                  "create market order - instrument: {}, time: {}, units: {}, order price: {}, take profit price: {}, stop loss price: {}",
-                  instrument_name,
-                  local_time,
-                  units,
-                  order_price,
-                  take_profit_price,
-                  stop_loss_price);
-            }
-            break;
-          }
-        }
-      }
-    }
+  // peak highs
+  auto peak_highs = iridium::algorithm::PeakHighs(*highs, kPeakHalfSize);
+  for (const auto &peak_high_info: peak_highs) {
+    auto [peak_high, index] = peak_high_info;
+    logger->info("time: {0}, peak time: {1}, peak high: {2}", local_time, TimeToLocalTimeString(short_term_hist_data.at(index).time), peak_high);
   }
 
-  // close position
-  if (account_ptr->HasOpenTrades(instrument_name)) {
-    auto macd_hist_0 = macd_hist->at(count - 2);
-    auto macd_hist_1 = macd_hist->back();
-    if ((macd_hist_0 < 0 && macd_hist_1 > 0 && account_ptr->open_position_size(instrument_name) < 0) ||
-        (macd_hist_0 > 0 && macd_hist_1 < 0 && account_ptr->open_position_size(instrument_name) > 0)) {
-      ClosePosition(instrument_name, account_ptr, acc_quote_rate, current_price, tick);
-      logger->info(
-          "close position - instrument: {}, time: {}",
-          instrument_name,
-          local_time);
-    }
-  }
 
 }
 
